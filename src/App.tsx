@@ -2496,7 +2496,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto no-scrollbar pr-1 pb-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3  pr-1 pb-1">
                       {lowStockItems.map(item => (
                         <div 
                           key={item.id}
@@ -3325,7 +3325,7 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="space-y-3">
                     {filteredInboundLogs.length > 0 ? (
                       filteredInboundLogs.map((log, i) => (
                         <SwipeableLogItem
@@ -3568,7 +3568,7 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="space-y-3">
                     {filteredOutboundLogs.length > 0 ? (
                       filteredOutboundLogs.map((log, i) => (
                         <SwipeableLogItem
@@ -4112,7 +4112,7 @@ export default function App() {
                       <h4 className="font-bold text-[#1C1C1E]">Nhật ký hệ thống</h4>
                     </div>
                   </div>
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar smooth-scroll">
+                  <div className="space-y-3">
                     {allLogs.slice(0, 10).map((log, i) => (
                       <div key={i} className="flex justify-between items-center py-3 border-b border-black/5 last:border-0">
                         <div>
@@ -4300,7 +4300,7 @@ export default function App() {
                   <span className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">{filteredLogsForReport.length} bản ghi</span>
                 </div>
                 
-                <div className="space-y-8 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-8">
                   {groupedLogsForReport.map((group, idx) => (
                     <div key={idx} className="bg-white rounded-[24px] border border-black/5 overflow-hidden shadow-sm">
                       <div 
@@ -4654,7 +4654,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-4">
                   {filteredLogsForFinancial.filter(l => l.type === 'Nhập kho').map((log, i) => (
                     <div key={i} className="bg-black/5 rounded-2xl p-4 flex items-center justify-between">
                       <div className="flex items-center gap-4">
