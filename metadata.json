@@ -1,0 +1,5 @@
+{
+  "name": "Quản lí kho hàng",
+  "description": "Hệ thống quản lý kho dược liệu hiện đại, kết hợp độ chính xác và sự hài hòa.",
+  "requestFramePermissions": ["geolocation"]
+}

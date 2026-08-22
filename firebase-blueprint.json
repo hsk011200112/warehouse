@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "An item in the inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "actualStock": { "type": "number" },
+        "minThreshold": { "type": "number" },
+        "maxThreshold": { "type": "number" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "status": { "type": "string" },
+        "auditFrequency": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name", "category", "unit", "actualStock"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Log of an inventory audit",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "theoreticalStock": { "type": "number" },
+        "actualStock": { "type": "number" },
+        "unit": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["id", "name", "theoreticalStock", "actualStock", "timestamp", "user"]
+    },
+    "InboundLog": {
+      "title": "InboundLog",
+      "description": "Log of an inbound stock transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "oldStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "reason": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["id", "name", "amount", "timestamp", "user"]
+    },
+    "OutboundLog": {
+      "title": "OutboundLog",
+      "description": "Log of an outbound stock transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "oldStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "reason": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["id", "name", "amount", "timestamp", "user"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "globalThreshold": { "type": "number" },
+        "customCategories": { "type": "array", "items": { "type": "string" } },
+        "customUnits": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the system",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["quản lí", "nhân viên"] },
+        "name": { "type": "string" }
+      },
+      "required": ["uid", "username", "role", "name"]
+    }
+  },
+  "firestore": {
+    "/inventory": {
+      "schema": "InventoryItem",
+      "description": "Collection of all inventory items"
+    },
+    "/audit_logs": {
+      "schema": "AuditLog",
+      "description": "Collection of audit logs"
+    },
+    "/inbound_logs": {
+      "schema": "InboundLog",
+      "description": "Collection of inbound stock logs"
+    },
+    "/outbound_logs": {
+      "schema": "OutboundLog",
+      "description": "Collection of outbound stock logs"
+    },
+    "/settings/global": {
+      "schema": "AppSettings",
+      "description": "Global settings document"
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile documents"
+    }
+  }
+}

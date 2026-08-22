@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: inventory
+    // Fields: id, name, category, unit, actualStock, minThreshold, maxThreshold, description, location, status, auditFrequency, importPrice, suppliers
+    //
+    // Collection: audit_logs
+    // Fields: id, name, category, theoreticalStock, actualStock, unit, timestamp, user, type, reason, oldStock, newStock, details
+    //
+    // Collection: inbound_logs
+    // Fields: id, name, type, amount, oldStock, newStock, reason, timestamp, user, importPrice, unit
+    //
+    // Collection: settings
+    // Document: global
+    // Fields: globalThreshold, customCategories, customUnits
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields: uid, username, role, name
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) && get(path).data.role == role;
+    }
+
+    function isManager() {
+      return isAuthenticated() &&
+        (hasRole('quản lí') ||
+          (request.auth.token.email == "thphan011202@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isStaff() {
+      return isAuthenticated() && (hasRole('nhân viên') || isManager());
+    }
+
+    function isValidInventoryItem(data) {
+      return data.keys().hasAll(['id', 'name', 'category', 'unit', 'actualStock']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.actualStock is number;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'name', 'theoreticalStock', 'actualStock', 'timestamp', 'user']) &&
+             data.timestamp is string && data.user is string;
+    }
+
+    function isValidInboundLog(data) {
+      return data.keys().hasAll(['id', 'name', 'amount', 'timestamp', 'user']) &&
+             data.timestamp is string && data.user is string;
+    }
+
+    // Rules
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      // Allow any authenticated user to create their own profile
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      // Only managers can change roles, users can update their own other info
+      allow update: if isAuthenticated() && (isManager() || (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
+    }
+
+    match /inventory/{itemId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isManager();
+      allow update: if isStaff();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isStaff();
+      allow update, delete: if isManager();
+    }
+
+    match /inbound_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isStaff();
+      allow update, delete: if isManager();
+    }
+
+    match /outbound_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Allow any authenticated user to create logs (will be validated by app logic)
+      allow update, delete: if isManager();
+    }
+
+    match /settings/global {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // Temporarily allow write for initial setup/sync if needed, or keep restricted
+    }
+
+    match /backups/{backupId} {
+      allow read, write: if isManager();
+    }
+  }
+}

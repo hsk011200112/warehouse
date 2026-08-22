@@ -1,0 +1,20 @@
+{
+  "name": "Inventory App",
+  "short_name": "Inventory",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007AFF",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/QUẢN.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
