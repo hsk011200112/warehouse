@@ -228,7 +228,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen, currentUser, currentScreen, naviga
             </div>
             <div>
               <h1 className="text-xl font-bold text-[#1C1C1E]">Quản lí kho hàng</h1>
-              <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">Hệ thống quản lý</p>
+              <p className="text-xs font-bold text-apple-gray uppercase tracking-widest">Hệ thống quản lý</p>
             </div>
           </div>
 
@@ -273,7 +273,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen, currentUser, currentScreen, naviga
               </div>
               <div>
                 <p className="text-sm font-bold text-[#1C1C1E]">{currentUser?.name}</p>
-                <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">{currentUser?.role}</p>
+                <p className="text-xs font-bold text-apple-gray uppercase tracking-widest">{currentUser?.role}</p>
               </div>
             </div>
             <button 
@@ -300,7 +300,7 @@ const OfflineBanner = ({ isOnline }: { isOnline: boolean }) => (
         initial={{ y: -50 }}
         animate={{ y: 0 }}
         exit={{ y: -50 }}
-        className="fixed top-0 left-0 right-0 z-[110] bg-orange-500 text-white py-2 px-4 flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-widest"
+        className="fixed top-0 left-0 right-0 z-[110] bg-orange-500 text-white py-2 px-4 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest"
       >
         <WifiOff size={12} />
         Đang hoạt động ngoại tuyến
@@ -668,6 +668,7 @@ export default function App() {
 
           await fetch(webhookUrl, {
             method: 'POST',
+            mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(payload),
             redirect: 'follow',
@@ -2202,7 +2203,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen bg-slate-50 flex flex-col items-center transition-colors duration-500`}>
+    <div className={`min-h-screen bg-[#E5E5EA] flex flex-col items-center transition-colors duration-500 md:p-6 lg:p-10`}>
       <OfflineBanner isOnline={isOnline} />
       <LoadingOverlay isSyncing={isSyncing} />
       <Sidebar 
@@ -2291,7 +2292,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <div className={`w-full max-w-md bg-[#F2F2F7] min-h-screen relative shadow-2xl md:shadow-none pb-12`}>
+      <div className={`w-full max-w-[1200px] bg-[#F2F2F7] min-h-screen flex-1 relative md:rounded-[40px] shadow-2xl pb-12 flex flex-col`}>
         
         {/* Top App Bar - Not fixed anymore */}
         {currentScreen !== 'login' && (
@@ -2318,7 +2319,7 @@ export default function App() {
                 <div className="flex flex-col gap-1">
                 {currentScreen === 'overview' ? (
                   <>
-                    <h1 className="text-[#1C1C1E] font-bold text-3xl tracking-tight">
+                    <h1 className="text-[#1C1C1E] font-bold text-3xl md:text-4xl tracking-tight">
                       {currentUser?.name || 'Nhân viên'}
                     </h1>
                     <div className="flex items-center gap-2 text-apple-gray text-sm font-medium">
@@ -2370,7 +2371,7 @@ export default function App() {
           </header>
         )}
 
-      <main className={`w-full ${currentScreen === 'login' ? 'p-0' : 'px-6 py-4'}`}>
+      <main className={`w-full ${currentScreen === 'login' ? 'p-0 flex-1 flex flex-col' : 'px-6 py-4 md:px-12 md:py-8'}`}>
         <PullToRefresh onRefresh={handleRefresh}>
           <AnimatePresence mode="wait">
           {currentScreen === 'login' && (
@@ -2379,7 +2380,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="min-h-screen flex flex-col items-center justify-center bg-[#F2F2F7] p-8 relative overflow-hidden"
+              className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden"
             >
               {/* One-line herb decoration */}
               <div className="one-line-herb top-10 left-10 w-64 h-64 opacity-10">
@@ -2394,7 +2395,7 @@ export default function App() {
                     <Leaf className="w-12 h-12 text-apple-green" />
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold text-[#1C1C1E] tracking-tight border-0">Quản lí kho hàng</h1>
+                    <h1 className="text-3xl md:text-4xl font-bold text-[#1C1C1E] tracking-tight border-0">Quản lí kho hàng</h1>
                     <p className="text-apple-gray font-medium mt-2">Hệ thống quản lý dược liệu</p>
                   </div>
                 </div>
@@ -2458,7 +2459,7 @@ export default function App() {
                 </form>
 
                 <div className="text-center">
-                  <p className="text-[10px] text-outline font-bold uppercase tracking-widest">
+                  <p className="text-xs text-outline font-bold uppercase tracking-widest">
                     Botanical Archivist v2.0 • Secure Access
                   </p>
                 </div>
@@ -2496,7 +2497,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3  pr-1 pb-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-1 pb-1">
                       {lowStockItems.map(item => (
                         <div 
                           key={item.id}
@@ -2630,13 +2631,13 @@ export default function App() {
                       </button>
                     )}
                   </div>
-                  <div className="divide-y divide-black/5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-2">
                     {filteredItems.length > 0 ? (
                       filteredItems.map((item) => (
                         <div 
                           key={item.id} 
                           onClick={() => navigateTo('details', item.id)}
-                          className="p-6 flex items-center justify-between hover:bg-black/5 transition-colors cursor-pointer"
+                          className="p-5 flex items-center justify-between hover:bg-black/5 transition-colors cursor-pointer rounded-2xl border border-transparent hover:border-black/5"
                         >
                           <div className="flex items-center gap-4">
                             <div>
@@ -2648,7 +2649,7 @@ export default function App() {
                             <span className={`block font-bold text-lg ${item.status === 'Tồn thấp' ? 'text-red-500' : 'text-apple-blue'}`}>
                               {item.actualStock} {item.unit?.toLowerCase() || ''}
                             </span>
-                            <span className={`text-[10px] font-bold uppercase tracking-tighter ${item.status === 'Tồn thấp' ? 'text-red-500' : 'text-apple-gray'}`}>
+                            <span className={`text-xs font-bold uppercase tracking-tighter ${item.status === 'Tồn thấp' ? 'text-red-500' : 'text-apple-gray'}`}>
                               {item.status === 'Tồn thấp' ? 'Cần nhập gấp' : `Vị trí: ${item.location || 'N/A'}`}
                             </span>
                           </div>
@@ -2749,7 +2750,7 @@ export default function App() {
                       >
                         <div className="flex-1">
                           <p className="text-[#1C1C1E] font-bold text-sm">{item.name}</p>
-                          <p className="text-apple-gray text-[10px] font-bold uppercase tracking-widest">{item.category}</p>
+                          <p className="text-apple-gray text-xs font-bold uppercase tracking-widest">{item.category}</p>
                         </div>
                         <ArrowRight size={16} className="text-apple-gray" />
                       </button>
@@ -2795,7 +2796,7 @@ export default function App() {
 
                     <div className="flex items-end justify-between relative z-10">
                       <div>
-                        <span className="text-[10px] font-bold text-apple-gray uppercase tracking-wider mb-1 block">Tiến độ hoàn thành</span>
+                        <span className="text-xs font-bold text-apple-gray uppercase tracking-wider mb-1 block">Tiến độ hoàn thành</span>
                         <h2 className="text-5xl font-bold tracking-tighter text-apple-blue">
                           {Math.round((items.filter(i => i.auditFrequency?.includes(auditType) && (auditCategory === 'Tất cả' || i.category === auditCategory)).length / items.filter(i => i.auditFrequency?.includes(auditType)).length) * 100) || 0}%
                         </h2>
@@ -2804,7 +2805,7 @@ export default function App() {
                         <span className="text-xs font-bold text-[#1C1C1E]">
                           {items.filter(i => i.auditFrequency?.includes(auditType) && (auditCategory === 'Tất cả' || i.category === auditCategory)).length} mục tiêu
                         </span>
-                        <p className="text-[10px] text-apple-gray font-medium">Cần hoàn thành hôm nay</p>
+                        <p className="text-xs text-apple-gray font-medium">Cần hoàn thành hôm nay</p>
                       </div>
                     </div>
                     
@@ -2842,7 +2843,7 @@ export default function App() {
                         </div>
                         {!isEditingAudit && (
                           <div className="text-right">
-                            <span className="text-[10px] font-bold text-apple-gray uppercase block mb-1">Lý thuyết</span>
+                            <span className="text-xs font-bold text-apple-gray uppercase block mb-1">Lý thuyết</span>
                             <span className="text-xl font-bold text-apple-gray/30">
                               {currentUser?.role === 'quản lí' ? item.actualStock : '***'}
                             </span>
@@ -2864,7 +2865,7 @@ export default function App() {
                       </div>
                       {isEditingAudit && (
                         <div className="mt-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full ${
+                          <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full ${
                             item.auditFrequency?.includes(auditType)
                               ? 'bg-apple-blue/10 text-apple-blue'
                               : 'bg-black/5 text-apple-gray'
@@ -2876,7 +2877,7 @@ export default function App() {
                       {!isEditingAudit && (
                         <div className="relative flex items-center">
                           <input 
-                            className="w-full bg-black/5 border-none rounded-2xl py-4 pl-6 pr-16 text-3xl font-bold text-apple-blue focus:ring-0 transition-all" 
+                            className="w-full bg-black/5 border-none rounded-2xl py-4 pl-6 pr-16 text-3xl md:text-4xl font-bold text-apple-blue focus:ring-0 transition-all" 
                             type="number" 
                             placeholder="0"
                             value={auditInputs[item.id] === 0 ? '' : (auditInputs[item.id] || '')}
@@ -2918,8 +2919,8 @@ export default function App() {
               <section className="relative h-[240px] min-h-[240px] w-full rounded-[40px] overflow-hidden shadow-2xl bg-black/5 flex items-center px-8 text-apple-gray">
                 <div className="absolute inset-0 bg-gradient-to-br from-apple-blue to-[#5856D6] flex flex-col justify-end p-8 pb-12">
                   <div className="flex items-center gap-2 mb-4">
-                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider border border-white/20">{selectedItem.category}</span>
-                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider border border-white/20">{selectedItem.unit}</span>
+                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider border border-white/20">{selectedItem.category}</span>
+                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider border border-white/20">{selectedItem.unit}</span>
                   </div>
                   <h2 className="text-white text-4xl font-extrabold tracking-tight leading-loose">{selectedItem.name}</h2>
                 </div>
@@ -2948,11 +2949,11 @@ export default function App() {
                     </div>
                     <div className="space-y-4">
                       <div className="bg-black/5 rounded-2xl p-4">
-                        <p className="text-[10px] font-bold tracking-widest uppercase text-apple-gray mb-1">Số Lô Ưu Tiên</p>
+                        <p className="text-xs font-bold tracking-widest uppercase text-apple-gray mb-1">Số Lô Ưu Tiên</p>
                         <p className="text-xl font-bold text-apple-blue">{selectedItem.batchId || 'N/A'}</p>
                       </div>
                       <div className="bg-red-500/5 rounded-2xl p-4 border-l-4 border-red-500">
-                        <p className="text-[10px] font-bold tracking-widest uppercase text-red-500/60 mb-1">Hạn Sử Dụng</p>
+                        <p className="text-xs font-bold tracking-widest uppercase text-red-500/60 mb-1">Hạn Sử Dụng</p>
                         <p className="text-xl font-bold text-red-500">{selectedItem.expiryDate || 'N/A'}</p>
                       </div>
                     </div>
@@ -2973,7 +2974,7 @@ export default function App() {
                     </div>
                     <div className="space-y-6">
                       <div className="relative">
-                        <label className="block text-[10px] font-bold tracking-widest uppercase text-apple-gray mb-3 ml-2">Nhập số lượng thực tế</label>
+                        <label className="block text-xs font-bold tracking-widest uppercase text-apple-gray mb-3 ml-2">Nhập số lượng thực tế</label>
                         <div className="flex items-center bg-black/5 rounded-[32px] px-8 py-6 transition-all focus-within:bg-white focus-within:shadow-xl focus-within:ring-4 focus-within:ring-apple-blue/10">
                           <input 
                             className="bg-transparent border-none focus:ring-0 w-full text-4xl font-bold text-[#1C1C1E] placeholder:text-apple-gray/30" 
@@ -3014,7 +3015,7 @@ export default function App() {
                       </div>
                     </div>
                     <div className="bg-black/5 rounded-3xl p-6 border border-apple-blue/10">
-                      <label className="block text-[10px] font-bold tracking-widest uppercase text-apple-gray mb-4 ml-2">Ngưỡng tồn kho tối thiểu</label>
+                      <label className="block text-xs font-bold tracking-widest uppercase text-apple-gray mb-4 ml-2">Ngưỡng tồn kho tối thiểu</label>
                       <div className="flex items-center gap-4">
                         <div className="flex-1 flex items-center bg-white rounded-2xl px-6 py-4 shadow-sm border border-black/5 focus-within:ring-4 focus-within:ring-apple-blue/10 transition-all">
                           <input 
@@ -3088,8 +3089,8 @@ export default function App() {
                             </div>
                             <div>
                               <p className="font-bold text-[#1C1C1E]">{t.type} {t.reason ? `(${t.reason})` : ''}</p>
-                              <p className="text-[10px] text-apple-gray font-bold uppercase tracking-wider">{t.timestamp}</p>
-                              <p className="text-[10px] text-apple-gray font-medium mt-0.5">Thực hiện bởi: {t.user}</p>
+                              <p className="text-xs text-apple-gray font-bold uppercase tracking-wider">{t.timestamp}</p>
+                              <p className="text-xs text-apple-gray font-medium mt-0.5">Thực hiện bởi: {t.user}</p>
                             </div>
                           </div>
                           <div className="text-right">
@@ -3097,7 +3098,7 @@ export default function App() {
                               {t.type === 'Kiểm kê' ? '' : '+'}{t.amount || ((t.actualStock ?? 0) - (t.theoreticalStock ?? 0))} {selectedItem.unit?.toLowerCase() || ''}
                             </p>
                             {t.type === 'Kiểm kê' && (
-                              <p className="text-[10px] text-apple-gray font-bold uppercase tracking-wider">Lệch: {(t.actualStock ?? 0) - (t.theoreticalStock ?? 0)}</p>
+                              <p className="text-xs text-apple-gray font-bold uppercase tracking-wider">Lệch: {(t.actualStock ?? 0) - (t.theoreticalStock ?? 0)}</p>
                             )}
                           </div>
                         </div>
@@ -3112,7 +3113,7 @@ export default function App() {
               <div className="flex justify-center pt-4">
                 <button 
                   onClick={() => setShowConfirmModal(true)}
-                  className="apple-button-primary w-full max-w-md py-5 flex items-center justify-center gap-3"
+                  className="apple-button-primary w-full max-w-5xl py-5 flex items-center justify-center gap-3"
                 >
                   <Save className="w-5 h-5" />
                   Lưu kiểm kê
@@ -3130,7 +3131,7 @@ export default function App() {
               className="space-y-8 pb-24"
             >
               <section className="px-2">
-                <h2 className="text-3xl font-bold text-[#1C1C1E] tracking-tight">Phiếu Nhập Kho</h2>
+                <h2 className="text-3xl md:text-4xl font-bold text-[#1C1C1E] tracking-tight">Phiếu Nhập Kho</h2>
                 <div className="flex bg-black/5 rounded-xl p-1 mt-4 w-fit">
                   <button 
                     onClick={() => setInboundTab('record')}
@@ -3151,7 +3152,7 @@ export default function App() {
               <div className="space-y-6">
                 <div className="apple-card p-6 space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Chọn nguyên liệu</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Chọn nguyên liệu</label>
                     <div className="relative group">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-apple-gray group-focus-within:text-apple-blue transition-colors" />
                       <input 
@@ -3174,7 +3175,7 @@ export default function App() {
                             >
                               <div className="flex-1">
                                 <p className="text-[#1C1C1E] font-bold text-sm">{item.name}</p>
-                                <p className="text-apple-gray text-[10px] font-bold uppercase tracking-widest">{item.category}</p>
+                                <p className="text-apple-gray text-xs font-bold uppercase tracking-widest">{item.category}</p>
                               </div>
                               <CheckCircle2 size={16} className="text-apple-blue" />
                             </button>
@@ -3195,7 +3196,7 @@ export default function App() {
                   </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Số lượng nhập</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Số lượng nhập</label>
                       <div className="relative">
                         <input 
                           type="number"
@@ -3216,7 +3217,7 @@ export default function App() {
                     </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Ghi chú</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Ghi chú</label>
                     <textarea 
                       className="w-full bg-black/5 border-none rounded-2xl p-4 text-[#1C1C1E] font-medium focus:ring-0 min-h-[80px]"
                       placeholder="Ví dụ: Nhập hàng từ nhà cung cấp A..."
@@ -3239,10 +3240,10 @@ export default function App() {
                 {inboundCart.length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between px-2">
-                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-apple-gray">Danh sách chờ nhập ({inboundCart.length})</h3>
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-apple-gray">Danh sách chờ nhập ({inboundCart.length})</h3>
                       <button 
                         onClick={() => setInboundCart([])}
-                        className="text-[10px] font-bold text-red-500 uppercase tracking-widest hover:underline"
+                        className="text-xs font-bold text-red-500 uppercase tracking-widest hover:underline"
                       >
                         Xóa tất cả
                       </button>
@@ -3258,7 +3259,7 @@ export default function App() {
                               </div>
                               <div>
                                 <p className="font-bold text-[#1C1C1E]">{item?.name}</p>
-                                <p className="text-[10px] text-apple-gray font-bold">+{cartItem.amount} {item?.unit} • {cartItem.reason}</p>
+                                <p className="text-xs text-apple-gray font-bold">+{cartItem.amount} {item?.unit} • {cartItem.reason}</p>
                               </div>
                             </div>
                             <button 
@@ -3313,14 +3314,14 @@ export default function App() {
                         type="date" 
                         value={inboundStartDate}
                         onChange={(e) => setInboundStartDate(e.target.value)}
-                        className="bg-transparent border-none text-[10px] font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
+                        className="bg-transparent border-none text-xs font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
                       />
-                      <span className="text-apple-gray text-[10px] font-bold">→</span>
+                      <span className="text-apple-gray text-xs font-bold">→</span>
                       <input 
                         type="date" 
                         value={inboundEndDate}
                         onChange={(e) => setInboundEndDate(e.target.value)}
-                        className="bg-transparent border-none text-[10px] font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
+                        className="bg-transparent border-none text-xs font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
                       />
                     </div>
                   </div>
@@ -3345,12 +3346,12 @@ export default function App() {
                               </div>
                               <div>
                                 <h4 className="font-bold text-[#1C1C1E] text-sm">{items.find(item => item.id === log.id)?.name || log.name || 'Không xác định'}</h4>
-                                <p className="text-[10px] text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
+                                <p className="text-xs text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
                               </div>
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold text-apple-green">+{log.amount}</p>
-                              <p className="text-[10px] text-apple-gray font-bold uppercase tracking-widest">{log.unit}</p>
+                              <p className="text-xs text-apple-gray font-bold uppercase tracking-widest">{log.unit}</p>
                             </div>
                           </div>
                         </SwipeableLogItem>
@@ -3373,7 +3374,7 @@ export default function App() {
               className="space-y-8 pb-24"
             >
               <section className="px-2">
-                <h2 className="text-3xl font-bold text-[#1C1C1E] tracking-tight">Phiếu Xuất Kho</h2>
+                <h2 className="text-3xl md:text-4xl font-bold text-[#1C1C1E] tracking-tight">Phiếu Xuất Kho</h2>
                 <div className="flex bg-black/5 rounded-xl p-1 mt-4 w-fit">
                   <button 
                     onClick={() => setOutboundTab('record')}
@@ -3394,7 +3395,7 @@ export default function App() {
               <div className="space-y-6">
                 <div className="apple-card p-6 space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Chọn nguyên liệu</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Chọn nguyên liệu</label>
                     <div className="relative group">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-apple-gray group-focus-within:text-apple-blue transition-colors" />
                       <input 
@@ -3417,7 +3418,7 @@ export default function App() {
                             >
                               <div className="flex-1">
                                 <p className="text-[#1C1C1E] font-bold text-sm">{item.name}</p>
-                                <p className="text-apple-gray text-[10px] font-bold uppercase tracking-widest">{item.category}</p>
+                                <p className="text-apple-gray text-xs font-bold uppercase tracking-widest">{item.category}</p>
                               </div>
                               <CheckCircle2 size={16} className="text-apple-blue" />
                             </button>
@@ -3438,7 +3439,7 @@ export default function App() {
                   </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Số lượng xuất</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Số lượng xuất</label>
                       <div className="relative">
                         <input 
                           type="number"
@@ -3459,7 +3460,7 @@ export default function App() {
                     </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Lý do xuất</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Lý do xuất</label>
                     <textarea 
                       className="w-full bg-black/5 border-none rounded-2xl p-4 text-[#1C1C1E] font-medium focus:ring-0 min-h-[80px]"
                       placeholder="Ví dụ: Xuất hàng bán lẻ, Xuất kho pha chế..."
@@ -3482,10 +3483,10 @@ export default function App() {
                 {outboundCart.length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between px-2">
-                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-apple-gray">Danh sách chờ xuất ({outboundCart.length})</h3>
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-apple-gray">Danh sách chờ xuất ({outboundCart.length})</h3>
                       <button 
                         onClick={() => setOutboundCart([])}
-                        className="text-[10px] font-bold text-red-500 uppercase tracking-widest hover:underline"
+                        className="text-xs font-bold text-red-500 uppercase tracking-widest hover:underline"
                       >
                         Xóa tất cả
                       </button>
@@ -3501,7 +3502,7 @@ export default function App() {
                               </div>
                               <div>
                                 <p className="font-bold text-[#1C1C1E]">{item?.name}</p>
-                                <p className="text-[10px] text-apple-gray font-bold">-{cartItem.amount} {item?.unit} • {cartItem.reason}</p>
+                                <p className="text-xs text-apple-gray font-bold">-{cartItem.amount} {item?.unit} • {cartItem.reason}</p>
                               </div>
                             </div>
                             <button 
@@ -3556,14 +3557,14 @@ export default function App() {
                         type="date" 
                         value={outboundStartDate}
                         onChange={(e) => setOutboundStartDate(e.target.value)}
-                        className="bg-transparent border-none text-[10px] font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
+                        className="bg-transparent border-none text-xs font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
                       />
-                      <span className="text-apple-gray text-[10px] font-bold">→</span>
+                      <span className="text-apple-gray text-xs font-bold">→</span>
                       <input 
                         type="date" 
                         value={outboundEndDate}
                         onChange={(e) => setOutboundEndDate(e.target.value)}
-                        className="bg-transparent border-none text-[10px] font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
+                        className="bg-transparent border-none text-xs font-bold text-[#1C1C1E] focus:ring-0 p-1 w-24"
                       />
                     </div>
                   </div>
@@ -3588,12 +3589,12 @@ export default function App() {
                               </div>
                               <div>
                                 <h4 className="font-bold text-[#1C1C1E] text-sm">{items.find(item => item.id === log.id)?.name || log.name || 'Không xác định'}</h4>
-                                <p className="text-[10px] text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
+                                <p className="text-xs text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
                               </div>
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold text-apple-blue">-{log.amount}</p>
-                              <p className="text-[10px] text-apple-gray font-bold uppercase tracking-widest">{log.unit}</p>
+                              <p className="text-xs text-apple-gray font-bold uppercase tracking-widest">{log.unit}</p>
                             </div>
                           </div>
                         </SwipeableLogItem>
@@ -3616,14 +3617,14 @@ export default function App() {
               className="space-y-8 pb-24"
             >
               <section className="px-2">
-                <h2 className="text-3xl font-bold text-[#1C1C1E] tracking-tight">Chỉnh sửa</h2>
+                <h2 className="text-3xl md:text-4xl font-bold text-[#1C1C1E] tracking-tight">Chỉnh sửa</h2>
                 <p className="text-apple-gray font-medium mt-1">{selectedItem.name}</p>
               </section>
 
               <div className="grid grid-cols-1 gap-6">
                 <div className="apple-card p-6 space-y-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Tên dược liệu</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Tên dược liệu</label>
                       <input 
                         className="w-full bg-black/5 border-none rounded-2xl h-14 px-5 text-[#1C1C1E] text-lg font-bold focus:ring-0 transition-all" 
                         type="text" 
@@ -3634,7 +3635,7 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Nhóm danh mục</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Nhóm danh mục</label>
                         <div className="relative">
                           <select 
                             className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0 appearance-none"
@@ -3650,7 +3651,7 @@ export default function App() {
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Đơn vị tính</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Đơn vị tính</label>
                         <div className="flex flex-wrap gap-2">
                           {customUnits.map((u) => (
                             <button 
@@ -3671,7 +3672,7 @@ export default function App() {
                   <h3 className="text-lg font-bold text-[#1C1C1E] px-2">Thông số lưu kho</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối thiểu</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối thiểu</label>
                         <input 
                           className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                           type="number" 
@@ -3684,7 +3685,7 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối đa</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối đa</label>
                         <input 
                           className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                           type="number" 
@@ -3697,7 +3698,7 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {editingItem.unit})</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {editingItem.unit})</label>
                         <input 
                           className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                           type="number" 
@@ -3710,7 +3711,7 @@ export default function App() {
                         />
                       </div>
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Vị trí kệ</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Vị trí kệ</label>
                       <input 
                         className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                         type="text" 
@@ -3823,8 +3824,8 @@ export default function App() {
             >
               <section className="space-y-6">
                 <div className="px-2">
-                  <span className="text-[10px] font-bold tracking-widest uppercase text-apple-gray mb-1 block">Tùy chỉnh ứng dụng</span>
-                  <h2 className="text-3xl font-bold text-[#1C1C1E]">Cài đặt hệ thống</h2>
+                  <span className="text-xs font-bold tracking-widest uppercase text-apple-gray mb-1 block">Tùy chỉnh ứng dụng</span>
+                  <h2 className="text-3xl md:text-4xl font-bold text-[#1C1C1E]">Cài đặt hệ thống</h2>
                 </div>
 
                 {/* Push Notifications (Manager Only) */}
@@ -3891,7 +3892,7 @@ export default function App() {
                       }}
                       className="w-full accent-apple-blue h-1.5 bg-black/5 rounded-full appearance-none cursor-pointer"
                     />
-                    <div className="flex justify-between mt-2 text-[10px] font-bold text-apple-gray uppercase tracking-widest">
+                    <div className="flex justify-between mt-2 text-xs font-bold text-apple-gray uppercase tracking-widest">
                       <span>1%</span>
                       <span>25%</span>
                       <span>50%</span>
@@ -3910,7 +3911,7 @@ export default function App() {
                   
                   <div className="space-y-6">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-apple-gray mb-3 ml-2">Google Apps Script Webhook</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-apple-gray mb-3 ml-2">Google Apps Script Webhook</p>
                       <div className="space-y-4">
                         <input 
                           type="text"
@@ -3927,14 +3928,14 @@ export default function App() {
                             }
                           }}
                         />
-                        <p className="text-[10px] text-apple-gray italic px-2">
+                        <p className="text-xs text-apple-gray italic px-2">
                           * Sử dụng Webhook để đẩy dữ liệu trực tiếp lên Google Sheets mà không cần Service Account.
                         </p>
                       </div>
                     </div>
 
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-apple-gray mb-3 ml-2">Danh mục ({customCategories.length})</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-apple-gray mb-3 ml-2">Danh mục ({customCategories.length})</p>
                       <div className="flex flex-wrap gap-2">
                         {customCategories.map(cat => (
                           <span key={cat} className="px-4 py-2 bg-black/5 rounded-full text-xs font-bold text-[#1C1C1E] flex items-center gap-2 border border-black/5">
@@ -4017,7 +4018,7 @@ export default function App() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-apple-gray mb-3 ml-2">Đơn vị ({customUnits.length})</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-apple-gray mb-3 ml-2">Đơn vị ({customUnits.length})</p>
                       <div className="flex flex-wrap gap-2">
                         {customUnits.map(unit => (
                           <span key={unit} className="px-4 py-2 bg-black/5 rounded-full text-xs font-bold text-[#1C1C1E] flex items-center gap-2 border border-black/5">
@@ -4117,9 +4118,9 @@ export default function App() {
                       <div key={i} className="flex justify-between items-center py-3 border-b border-black/5 last:border-0">
                         <div>
                           <p className="text-sm font-bold text-[#1C1C1E]">{log.type}: {items.find(item => item.id === log.id)?.name || log.name || 'Không xác định'}</p>
-                          <p className="text-[10px] text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
+                          <p className="text-xs text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
                         </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${log.type === 'Nhập kho' ? 'text-apple-green' : 'text-apple-blue'}`}>
+                        <span className={`text-xs font-bold uppercase tracking-wider ${log.type === 'Nhập kho' ? 'text-apple-green' : 'text-apple-blue'}`}>
                           {log.amount ? `+${log.amount}` : 'Kiểm kê'}
                         </span>
                       </div>
@@ -4139,7 +4140,7 @@ export default function App() {
                     <div className="w-12 h-12 bg-apple-green/10 text-apple-green rounded-2xl flex items-center justify-center">
                       <FileText size={24} />
                     </div>
-                    <span className="text-[10px] font-bold text-[#1C1C1E] uppercase tracking-widest text-center">Xuất Excel</span>
+                    <span className="text-xs font-bold text-[#1C1C1E] uppercase tracking-widest text-center">Xuất Excel</span>
                   </button>
                   <button 
                     onClick={syncAndBackupData}
@@ -4149,7 +4150,7 @@ export default function App() {
                     <div className="w-12 h-12 bg-apple-blue/10 text-apple-blue rounded-2xl flex items-center justify-center">
                       {isSyncing ? <IOSSpinner /> : <Cloud size={24} />}
                     </div>
-                    <span className="text-[10px] font-bold text-[#1C1C1E] uppercase tracking-widest text-center text-balance leading-tight">Đồng bộ &<br/>Sao lưu</span>
+                    <span className="text-xs font-bold text-[#1C1C1E] uppercase tracking-widest text-center text-balance leading-tight">Đồng bộ &<br/>Sao lưu</span>
                   </button>
                 </div>
 
@@ -4191,7 +4192,7 @@ export default function App() {
                       onChange={(e) => setReportStartDate(e.target.value)}
                       className="bg-transparent border-none text-xs font-bold text-[#1C1C1E] focus:ring-0 p-1 cursor-pointer min-w-[130px] relative z-40"
                     />
-                    <span className="text-apple-gray text-[10px] font-bold">→</span>
+                    <span className="text-apple-gray text-xs font-bold">→</span>
                     <input 
                       type="date" 
                       value={reportEndDate}
@@ -4218,14 +4219,14 @@ export default function App() {
                 
                 <div className="flex justify-between items-start mb-8 relative z-10">
                   <div>
-                    <span className="text-[10px] font-bold tracking-widest uppercase text-white/60 mb-2 block">Chỉ số chênh lệch</span>
+                    <span className="text-xs font-bold tracking-widest uppercase text-white/60 mb-2 block">Chỉ số chênh lệch</span>
                     <h2 className="text-6xl font-bold leading-none tracking-tighter text-white">-2.3<span className="text-2xl text-white/60 ml-1">%</span></h2>
                   </div>
                   <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-[24px] flex items-center justify-center border border-white/20">
                     <AlertTriangle className="w-8 h-8 text-white" />
                   </div>
                 </div>
-                <div className="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-full inline-flex items-center gap-2 border border-white/20">
+                <div className="bg-white/20 backdrop-blur-md text-white text-xs font-bold uppercase tracking-widest px-4 py-2.5 rounded-full inline-flex items-center gap-2 border border-white/20">
                   <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
                   Vượt ngưỡng an toàn 0.5%
                 </div>
@@ -4233,14 +4234,14 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="apple-card p-6">
-                  <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest mb-2">Tồn lý thuyết</p>
-                  <p className="text-3xl font-bold text-[#1C1C1E]">12,450</p>
-                  <p className="text-[10px] text-apple-gray font-medium mt-1">Đơn vị lưu kho</p>
+                  <p className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-2">Tồn lý thuyết</p>
+                  <p className="text-3xl md:text-4xl font-bold text-[#1C1C1E]">12,450</p>
+                  <p className="text-xs text-apple-gray font-medium mt-1">Đơn vị lưu kho</p>
                 </div>
                 <div className="apple-card p-6">
-                  <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest mb-2">Tồn thực tế</p>
-                  <p className="text-3xl font-bold text-[#1C1C1E]">12,164</p>
-                  <p className="text-[10px] text-red-500 font-bold mt-1">-286 đơn vị hụt</p>
+                  <p className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-2">Tồn thực tế</p>
+                  <p className="text-3xl md:text-4xl font-bold text-[#1C1C1E]">12,164</p>
+                  <p className="text-xs text-red-500 font-bold mt-1">-286 đơn vị hụt</p>
                 </div>
               </div>
 
@@ -4255,7 +4256,7 @@ export default function App() {
                     </div>
                     <h3 className="text-[#1C1C1E] font-bold text-xl">Gợi ý FIFO</h3>
                   </div>
-                  <span className="bg-apple-blue/10 text-apple-blue text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider">Ưu tiên</span>
+                  <span className="bg-apple-blue/10 text-apple-blue text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wider">Ưu tiên</span>
                 </div>
                 
                 {fifoItem ? (
@@ -4264,8 +4265,8 @@ export default function App() {
                       <div>
                         <h4 className="font-bold text-[#1C1C1E] text-lg">{fifoItem.name}</h4>
                         <div className="flex flex-col gap-1 mt-1">
-                          <p className="text-[10px] text-apple-gray font-bold uppercase tracking-wider">Tồn kho: {fifoItem.actualStock} {fifoItem.unit}</p>
-                          <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider">HSD: {fifoItem.expiryDate || 'N/A'}</p>
+                          <p className="text-xs text-apple-gray font-bold uppercase tracking-wider">Tồn kho: {fifoItem.actualStock} {fifoItem.unit}</p>
+                          <p className="text-xs text-red-500 font-bold uppercase tracking-wider">HSD: {fifoItem.expiryDate || 'N/A'}</p>
                         </div>
                       </div>
                     </div>
@@ -4297,7 +4298,7 @@ export default function App() {
                     </div>
                     <h3 className="text-[#1C1C1E] font-bold text-xl">Nhật ký tồn kho</h3>
                   </div>
-                  <span className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">{filteredLogsForReport.length} bản ghi</span>
+                  <span className="text-xs font-bold text-apple-gray uppercase tracking-widest">{filteredLogsForReport.length} bản ghi</span>
                 </div>
                 
                 <div className="space-y-8">
@@ -4314,7 +4315,7 @@ export default function App() {
                           <h4 className="font-bold text-[#1C1C1E]">{group.date}</h4>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-apple-gray bg-white px-3 py-1 rounded-full shadow-sm">
+                          <span className="text-xs font-bold uppercase tracking-widest text-apple-gray bg-white px-3 py-1 rounded-full shadow-sm">
                             {group.logs.length} bản ghi
                           </span>
                           <ChevronDown size={18} className={`text-apple-gray transition-transform duration-200 ${collapsedReportGroups[group.date] ? 'rotate-180' : ''}`} />
@@ -4339,7 +4340,7 @@ export default function App() {
                                     <div className="flex justify-between items-start gap-2">
                                       <div className="flex flex-col gap-1.5 flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                                          <span className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
                                             log.type === 'Nhập kho' ? 'bg-apple-green/10 text-apple-green' : 
                                             log.type === 'Xuất kho' ? 'bg-apple-blue/10 text-apple-blue' : 
                                             'bg-orange-500/10 text-orange-500'
@@ -4349,7 +4350,7 @@ export default function App() {
                                             {log.type === 'Kiểm kê' && <ClipboardList size={10} />}
                                             {log.type}
                                           </span>
-                                          <span className="text-[10px] font-bold text-apple-gray">{timePart}</span>
+                                          <span className="text-xs font-bold text-apple-gray">{timePart}</span>
                                         </div>
                                         <p className="text-sm font-bold text-[#1C1C1E]">{itemName}</p>
                                       </div>
@@ -4363,10 +4364,10 @@ export default function App() {
                                            log.type === 'Xuất kho' ? `-${log.amount || 0}` : 
                                            `${log.actualStock ?? '?'} / ${log.theoreticalStock ?? '?'}`}
                                         </p>
-                                        <p className="text-[10px] text-apple-gray font-bold uppercase tracking-widest mt-0.5">{log.unit || ''}</p>
+                                        <p className="text-xs text-apple-gray font-bold uppercase tracking-widest mt-0.5">{log.unit || ''}</p>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-apple-gray font-bold uppercase tracking-widest bg-black/5 w-fit px-2.5 py-1 rounded-lg">
+                                    <div className="flex items-center gap-1.5 text-xs text-apple-gray font-bold uppercase tracking-widest bg-black/5 w-fit px-2.5 py-1 rounded-lg">
                                       {log.user || 'Unknown'}
                                     </div>
                                   </div>
@@ -4398,14 +4399,14 @@ export default function App() {
               className="space-y-8 pb-24"
             >
               <section className="px-2">
-                <span className="text-[10px] font-bold tracking-widest uppercase text-apple-gray mb-1 block">Tạo mới</span>
-                <h2 className="text-3xl font-bold text-[#1C1C1E]">Thêm nguyên liệu</h2>
+                <span className="text-xs font-bold tracking-widest uppercase text-apple-gray mb-1 block">Tạo mới</span>
+                <h2 className="text-3xl md:text-4xl font-bold text-[#1C1C1E]">Thêm nguyên liệu</h2>
               </section>
 
               <div className="grid grid-cols-1 gap-6 mt-6">
                 <div className="apple-card p-6 space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Tên nguyên vật liệu</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Tên nguyên vật liệu</label>
                     <input 
                       className="w-full bg-black/5 border-none rounded-2xl h-14 px-5 text-[#1C1C1E] text-lg font-bold focus:ring-0 transition-all" 
                       type="text" 
@@ -4415,7 +4416,7 @@ export default function App() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Mô tả chi tiết</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Mô tả chi tiết</label>
                     <textarea 
                       className="w-full bg-black/5 border-none rounded-2xl p-5 text-[#1C1C1E] text-base font-medium focus:ring-0 transition-all min-h-[120px]" 
                       placeholder="Nhập mô tả về công dụng, cách bảo quản..."
@@ -4431,7 +4432,7 @@ export default function App() {
                       <div className="w-8 h-8 rounded-xl bg-apple-blue/10 text-apple-blue flex items-center justify-center">
                         <LayoutGrid size={18} />
                       </div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray">Nhóm danh mục</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray">Nhóm danh mục</label>
                     </div>
                     <div className="relative">
                       <select 
@@ -4452,7 +4453,7 @@ export default function App() {
                       <div className="w-8 h-8 rounded-xl bg-apple-blue/10 text-apple-blue flex items-center justify-center">
                         <BarChart3 size={18} />
                       </div>
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray">Đơn vị tính</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray">Đơn vị tính</label>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {customUnits.map((u) => (
@@ -4460,7 +4461,7 @@ export default function App() {
                           key={u}
                           type="button"
                           onClick={() => setNewItem(prev => ({ ...prev, unit: u }))}
-                          className={`px-4 py-3 rounded-xl text-[10px] font-bold transition-all active:scale-95 ${newItem.unit === u ? 'bg-apple-blue text-white shadow-lg shadow-apple-blue/20' : 'bg-black/5 text-apple-gray hover:bg-black/10'}`}
+                          className={`px-4 py-3 rounded-xl text-xs font-bold transition-all active:scale-95 ${newItem.unit === u ? 'bg-apple-blue text-white shadow-lg shadow-apple-blue/20' : 'bg-black/5 text-apple-gray hover:bg-black/10'}`}
                         >
                           {u}
                         </button>
@@ -4481,7 +4482,7 @@ export default function App() {
                   </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Tồn kho hiện tại</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Tồn kho hiện tại</label>
                         <input 
                           className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                           type="number" 
@@ -4494,7 +4495,7 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Vị trí kệ</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Vị trí kệ</label>
                         <input 
                           className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                           type="text" 
@@ -4504,7 +4505,7 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối thiểu</label>
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối thiểu</label>
                         <input 
                           className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                           type="number" 
@@ -4519,7 +4520,7 @@ export default function App() {
                     </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối đa</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Ngưỡng tối đa</label>
                       <input 
                         className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                         type="number" 
@@ -4532,7 +4533,7 @@ export default function App() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {newItem.unit})</label>
+                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {newItem.unit})</label>
                       <input 
                         className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
                         type="number" 
@@ -4585,7 +4586,7 @@ export default function App() {
                       onChange={(e) => setFinancialStartDate(e.target.value)}
                       className="bg-transparent border-none text-xs font-bold text-[#1C1C1E] focus:ring-0 p-1 cursor-pointer min-w-[130px] relative z-40"
                     />
-                    <span className="text-apple-gray text-[10px] font-bold">→</span>
+                    <span className="text-apple-gray text-xs font-bold">→</span>
                     <input 
                       type="date" 
                       value={financialEndDate}
@@ -4616,7 +4617,7 @@ export default function App() {
                     <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
                       <DollarSign className="w-6 h-6 text-white" />
                     </div>
-                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/70">Tổng giá trị kho hàng</span>
+                    <span className="text-xs font-bold tracking-[0.2em] uppercase text-white/70">Tổng giá trị kho hàng</span>
                   </div>
                   
                   <div className="space-y-2">
@@ -4629,11 +4630,11 @@ export default function App() {
 
                   <div className="grid grid-cols-2 gap-4 pt-4">
                     <div className="bg-white/10 backdrop-blur-md rounded-3xl p-5 border border-white/10">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2">Số lượng mặt hàng</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Số lượng mặt hàng</p>
                       <p className="text-2xl font-black">{items.length}</p>
                     </div>
                     <div className="bg-white/10 backdrop-blur-md rounded-3xl p-5 border border-white/10">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2">Tổng khối lượng</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Tổng khối lượng</p>
                       <p className="text-2xl font-black">{totalStockWeight} kg</p>
                     </div>
                   </div>
@@ -4650,7 +4651,7 @@ export default function App() {
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-black text-apple-blue">{totalInboundValueInRange.toLocaleString('vi-VN')}đ</p>
-                    <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">Tổng chi phí nhập</p>
+                    <p className="text-xs font-bold text-apple-gray uppercase tracking-widest">Tổng chi phí nhập</p>
                   </div>
                 </div>
 
@@ -4663,14 +4664,14 @@ export default function App() {
                         </div>
                         <div>
                           <h4 className="font-bold text-[#1C1C1E] text-sm">{items.find(item => item.id === log.id)?.name || log.name || 'Không xác định'}</h4>
-                          <p className="text-[10px] text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
+                          <p className="text-xs text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-[#1C1C1E]">
                           {((log.amount || 0) * (log.importPrice || 0)).toLocaleString('vi-VN')}đ
                         </p>
-                        <p className="text-[10px] text-apple-gray font-bold uppercase tracking-widest">
+                        <p className="text-xs text-apple-gray font-bold uppercase tracking-widest">
                           {log.amount} {log.unit} x {log.importPrice?.toLocaleString('vi-VN')}đ
                         </p>
                       </div>
@@ -4688,7 +4689,7 @@ export default function App() {
               <section className="space-y-6">
                 <div className="flex items-center justify-between px-2">
                   <h3 className="text-2xl font-bold text-[#1C1C1E]">Chi tiết tài chính</h3>
-                  <span className="px-4 py-1.5 bg-apple-blue/10 text-apple-blue text-[10px] font-bold rounded-full uppercase tracking-widest">Sắp xếp theo giá trị</span>
+                  <span className="px-4 py-1.5 bg-apple-blue/10 text-apple-blue text-xs font-bold rounded-full uppercase tracking-widest">Sắp xếp theo giá trị</span>
                 </div>
 
                 <div className="space-y-4">
@@ -4697,9 +4698,9 @@ export default function App() {
                       <div className="flex-1">
                         <h4 className="font-bold text-[#1C1C1E] text-lg leading-tight">{item.name}</h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">{item.actualStock} {item.unit}</span>
+                          <span className="text-xs font-bold text-apple-gray uppercase tracking-widest">{item.actualStock} {item.unit}</span>
                           <div className="w-1 h-1 rounded-full bg-black/10" />
-                          <span className="text-[10px] font-bold text-apple-blue uppercase tracking-widest">
+                          <span className="text-xs font-bold text-apple-blue uppercase tracking-widest">
                             {(item.importPrice || 0).toLocaleString('vi-VN')} đ / {item.unit === 'Kg' || item.unit === 'Lít' ? item.unit : 'đv'}
                           </span>
                         </div>
@@ -4708,7 +4709,7 @@ export default function App() {
                         <p className="text-lg font-black text-[#1C1C1E]">
                           {(item.actualStock * (item.importPrice || 0)).toLocaleString('vi-VN')}đ
                         </p>
-                        <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest opacity-60">Giá trị tồn</p>
+                        <p className="text-xs font-bold text-apple-gray uppercase tracking-widest opacity-60">Giá trị tồn</p>
                       </div>
                     </div>
                   ))}
@@ -4745,7 +4746,7 @@ export default function App() {
                         </div>
                         <div>
                           <h3 className="font-bold text-[#1C1C1E] text-lg">Giỏ hàng ({purchaseCart.length})</h3>
-                          <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">Dự kiến đặt hàng</p>
+                          <p className="text-xs font-bold text-apple-gray uppercase tracking-widest">Dự kiến đặt hàng</p>
                         </div>
                       </div>
                       <button onClick={() => setPurchaseCart([])} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg active:scale-95 transition-all">
@@ -4799,7 +4800,7 @@ export default function App() {
                         <div className="flex items-center gap-4">
                           <div>
                             <h3 className="font-bold text-[#1C1C1E] text-lg">{item.name}</h3>
-                            <p className="text-[10px] font-bold text-apple-gray uppercase tracking-widest">Giá hiện tại: {item.importPrice?.toLocaleString('vi-VN')} đ / {item.unit}</p>
+                            <p className="text-xs font-bold text-apple-gray uppercase tracking-widest">Giá hiện tại: {item.importPrice?.toLocaleString('vi-VN')} đ / {item.unit}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -4846,7 +4847,7 @@ export default function App() {
                                 <p className="font-bold text-sm text-[#1C1C1E]">{s.name}</p>
                                 <span className="text-[8px] font-bold text-apple-gray uppercase tracking-tighter bg-white px-1.5 py-0.5 rounded border border-black/5">{s.lastUpdated?.split(' - ')[0]}</span>
                               </div>
-                              <p className="text-[10px] text-apple-gray font-medium mt-0.5">{s.contact}</p>
+                              <p className="text-xs text-apple-gray font-medium mt-0.5">{s.contact}</p>
                             </div>
                             <div className="text-right">
                               <p className={`font-bold text-sm ${s.price > (item.importPrice || 0) ? 'text-red-500' : 'text-apple-green'}`}>
@@ -4945,7 +4946,7 @@ export default function App() {
                         >
                           <div className="flex-1">
                             <p className="text-[#1C1C1E] font-bold text-sm">{item.name}</p>
-                            <p className="text-apple-gray text-[10px] font-bold uppercase tracking-widest">{item.category}</p>
+                            <p className="text-apple-gray text-xs font-bold uppercase tracking-widest">{item.category}</p>
                           </div>
                           <ArrowRight size={16} className="text-apple-gray" />
                         </button>
@@ -5017,26 +5018,26 @@ export default function App() {
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-apple-blue px-2 py-0.5 bg-apple-blue/5 rounded-md">{item.category}</span>
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-[#1C1C1E] px-2 py-0.5 bg-black/5 rounded-md">{item.unit}</span>
+                            <span className="text-xs font-bold uppercase tracking-widest text-apple-blue px-2 py-0.5 bg-apple-blue/5 rounded-md">{item.category}</span>
+                            <span className="text-xs font-bold uppercase tracking-widest text-[#1C1C1E] px-2 py-0.5 bg-black/5 rounded-md">{item.unit}</span>
                             {item.actualStock < (item.minThreshold || 0) && (
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-red-500 px-2 py-0.5 bg-red-50 rounded-md">Tồn thấp</span>
+                              <span className="text-xs font-bold uppercase tracking-widest text-red-500 px-2 py-0.5 bg-red-50 rounded-md">Tồn thấp</span>
                             )}
                           </div>
                           <h3 className="text-lg font-extrabold text-[#1C1C1E] mb-2 truncate group-hover:text-apple-blue transition-colors">{item.name}</h3>
                           <div className="flex items-center gap-6">
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-apple-gray uppercase tracking-widest mb-0.5">Tồn kho</span>
+                              <span className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-0.5">Tồn kho</span>
                               <span className={`text-sm font-black ${item.actualStock < (item.minThreshold || 0) ? 'text-red-500' : 'text-[#1C1C1E]'}`}>
                                 {item.actualStock} {item.unit}
                               </span>
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-apple-gray uppercase tracking-widest mb-0.5">Vị trí</span>
+                              <span className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-0.5">Vị trí</span>
                               <span className="text-sm font-bold text-apple-gray">{item.location || '—'}</span>
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-apple-gray uppercase tracking-widest mb-0.5">Giá nhập</span>
+                              <span className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-0.5">Giá nhập</span>
                               <span className="text-sm font-bold text-apple-gray">{(item.importPrice || 0).toLocaleString()}đ</span>
                             </div>
                           </div>
@@ -5153,7 +5154,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md apple-card p-8 space-y-6"
+              className="relative w-full max-w-5xl apple-card p-8 space-y-6"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-apple-blue/10 text-apple-blue flex items-center justify-center">
@@ -5161,13 +5162,13 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-[#1C1C1E]">{editingSupplier.idx !== undefined ? 'Sửa nhà cung cấp' : 'Thêm nhà cung cấp'}</h2>
-                  <p className="text-apple-gray text-[10px] font-bold uppercase tracking-widest">{selectedItem?.name}</p>
+                  <p className="text-apple-gray text-xs font-bold uppercase tracking-widest">{selectedItem?.name}</p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Tên nhà cung cấp</label>
+                  <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Tên nhà cung cấp</label>
                   <input 
                     className="w-full bg-black/5 border-none rounded-2xl h-14 px-5 text-[#1C1C1E] font-bold focus:ring-0" 
                     type="text" 
@@ -5177,7 +5178,7 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Thông tin liên hệ</label>
+                  <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Thông tin liên hệ</label>
                   <input 
                     className="w-full bg-black/5 border-none rounded-2xl h-14 px-5 text-[#1C1C1E] font-bold focus:ring-0" 
                     type="text" 
@@ -5187,7 +5188,7 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-apple-gray ml-2">Giá cung cấp (VND / {selectedItem?.unit})</label>
+                  <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá cung cấp (VND / {selectedItem?.unit})</label>
                   <input 
                     className="w-full bg-black/5 border-none rounded-2xl h-14 px-5 text-[#1C1C1E] font-bold focus:ring-0" 
                     type="number" 
