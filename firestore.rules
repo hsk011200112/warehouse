@@ -64,30 +64,41 @@ service cloud.firestore {
              data.timestamp is string && data.user is string;
     }
 
+    function isValidBackup(data) {
+      return data.keys().hasAll(['timestamp', 'backupBy']) &&
+             data.timestamp is string && data.backupBy is string;
+    }
+
     // Rules
     match /users/{uid} {
       allow read: if isAuthenticated();
       // Allow any authenticated user to create their own profile
       allow create: if isAuthenticated() && request.auth.uid == uid;
-      // Only managers can change roles, users can update their own other info
-      allow update: if isAuthenticated() && (isManager() || (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
+      // Only managers can change roles, users can update their own other info or keep their existing role
+      allow update: if isAuthenticated() && (
+        isManager() || 
+        (request.auth.uid == uid && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
+          request.resource.data.role == resource.data.role
+        ))
+      );
     }
 
     match /inventory/{itemId} {
       allow read: if isAuthenticated();
       allow create, delete: if isManager();
-      allow update: if isStaff();
+      allow update: if isStaff() || isAuthenticated();
     }
 
     match /audit_logs/{logId} {
       allow read: if isAuthenticated();
-      allow create: if isStaff();
+      allow create: if isAuthenticated();
       allow update, delete: if isManager();
     }
 
     match /inbound_logs/{logId} {
       allow read: if isAuthenticated();
-      allow create: if isStaff();
+      allow create: if isAuthenticated();
       allow update, delete: if isManager();
     }
 
@@ -103,7 +114,9 @@ service cloud.firestore {
     }
 
     match /backups/{backupId} {
-      allow read, write: if isManager();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidBackup(request.resource.data);
+      allow update, delete: if isManager();
     }
   }
 }

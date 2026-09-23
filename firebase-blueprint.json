@@ -90,6 +90,19 @@
         "name": { "type": "string" }
       },
       "required": ["uid", "username", "role", "name"]
+    },
+    "BackupRecord": {
+      "title": "BackupRecord",
+      "description": "Backup snapshot of the inventory, settings, and logs",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string" },
+        "inventory": { "type": "array" },
+        "settings": { "type": "object" },
+        "logs": { "type": "array" },
+        "backupBy": { "type": "string" }
+      },
+      "required": ["timestamp", "backupBy"]
     }
   },
   "firestore": {
@@ -116,6 +129,10 @@
     "/users/{uid}": {
       "schema": "User",
       "description": "User profile documents"
+    },
+    "/backups/{backupId}": {
+      "schema": "BackupRecord",
+      "description": "Collection of backup snapshots"
     }
   }
 }

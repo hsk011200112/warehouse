@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import Fuse from 'fuse.js';
 import * as XLSX from 'xlsx';
 import { 
@@ -44,7 +44,11 @@ import {
   Cloud,
   TrendingUp,
   AlertOctagon,
-  Clock
+  Clock,
+  Package,
+  ArrowUpRight,
+  CheckCircle,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -62,8 +66,8 @@ import {
   query,
   where,
   writeBatch,
-  getDocFromServer,
   getDocs,
+  getDoc,
   waitForPendingWrites,
   enableNetwork,
   increment
@@ -309,6 +313,37 @@ const OfflineBanner = ({ isOnline }: { isOnline: boolean }) => (
   </AnimatePresence>
 );
 
+const ToastNotification = ({ 
+  toast, 
+  onClose 
+}: { 
+  toast: { text: string; type: 'success' | 'error' | 'info' } | null; 
+  onClose: () => void 
+}) => (
+  <AnimatePresence>
+    {toast && (
+      <motion.div
+        initial={{ opacity: 0, y: -20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        className="fixed top-5 left-1/2 -translate-x-1/2 z-[120] cursor-pointer max-w-[90vw]"
+      >
+        <div className={`px-4 py-2.5 rounded-2xl shadow-xl backdrop-blur-xl border flex items-center gap-2.5 text-xs font-semibold ${
+          toast.type === 'success' 
+            ? 'bg-emerald-600/95 text-white border-emerald-500/30' 
+            : toast.type === 'error'
+            ? 'bg-red-600/95 text-white border-red-500/30'
+            : 'bg-zinc-800/95 text-white border-white/10'
+        }`}>
+          <span>{toast.text}</span>
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
 const LoadingOverlay = ({ isSyncing }: { isSyncing: boolean }) => (
   <AnimatePresence>
     {isSyncing && (
@@ -345,30 +380,91 @@ export default function App() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isAddingUnit, setIsAddingUnit] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = useCallback((text: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(prev => (prev?.text === text ? null : prev));
+    }, 3200);
+  }, []);
 
   const handleRefresh = async () => {
     if (!navigator.onLine) {
-      alert('Không có kết nối mạng. Bạn đang dùng dữ liệu ngoại tuyến.');
+      showToast('Đang hoạt động ngoại tuyến. Dữ liệu đang hiển thị từ bộ nhớ đệm.', 'info');
       return;
     }
     try {
       setIsSyncing(true);
       // Đảm bảo kết nối mạng Firebase được khôi phục
-      await enableNetwork(db);
-      // Đợi đến khi tất cả các dữ liệu đã ghi ở chế độ offline được đồng bộ lên máy chủ
-      await waitForPendingWrites(db);
+      try {
+        await enableNetwork(db);
+      } catch (e) {
+        console.warn('Network enable notice:', e);
+      }
       
-      // Force refresh data
-      await Promise.all([
+      // Chờ các bản ghi offline đồng bộ (giới hạn tối đa 2.5s để tránh treo UI)
+      try {
+        await Promise.race([
+          waitForPendingWrites(db),
+          new Promise(resolve => setTimeout(resolve, 2500))
+        ]);
+      } catch (e) {
+        console.warn('Wait for writes timeout/warning:', e);
+      }
+      
+      // Tải song song dữ liệu mới nhất trực tiếp từ Firestore Cloud
+      const [invSnap, inSnap, outSnap, auditSnap, settingsSnap] = await Promise.all([
         getDocs(collection(db, 'inventory')),
         getDocs(collection(db, 'inbound_logs')),
         getDocs(collection(db, 'outbound_logs')),
         getDocs(collection(db, 'audit_logs')),
-        getDocs(collection(db, 'settings'))
+        getDoc(doc(db, 'settings', 'global')).catch(() => null)
       ]);
-      console.log('Đã làm mới dữ liệu và đồng bộ');
-    } catch (error) {
+
+      // 1. Cập nhật Items
+      if (invSnap && !invSnap.empty) {
+        const seenIds = new Set<string>();
+        const freshItems: InventoryItem[] = [];
+        invSnap.docs.forEach(docSnap => {
+          const data = docSnap.data() as InventoryItem;
+          const itemId = docSnap.id || data.id;
+          if (itemId && !seenIds.has(itemId)) {
+            seenIds.add(itemId);
+            freshItems.push({ ...data, id: itemId });
+          }
+        });
+        setItems(freshItems);
+        try {
+          localStorage.setItem('botanical_inventory_cache', JSON.stringify(freshItems));
+        } catch {}
+      }
+
+      // 2. Cập nhật Logs
+      const inLogs = inSnap ? inSnap.docs.map(d => ({ ...d.data(), docId: d.id, type: 'Nhập kho' } as LogEntry)) : [];
+      const outLogs = outSnap ? outSnap.docs.map(d => ({ ...d.data(), docId: d.id, type: 'Xuất kho' } as LogEntry)) : [];
+      const auditLogs = auditSnap ? auditSnap.docs.map(d => ({ ...d.data(), docId: d.id, type: 'Kiểm kê' } as LogEntry)) : [];
+      const combined = [...inLogs, ...outLogs, ...auditLogs].sort((a, b) => 
+        (b.timestamp || '').localeCompare(a.timestamp || '')
+      );
+      setAllLogs(combined);
+      try {
+        localStorage.setItem('botanical_logs_cache', JSON.stringify(combined.slice(0, 500)));
+      } catch {}
+
+      // 3. Cập nhật Settings nếu có
+      if (settingsSnap && settingsSnap.exists()) {
+        const sData = settingsSnap.data();
+        if (sData.globalThreshold !== undefined) setGlobalThreshold(sData.globalThreshold);
+        if (sData.customCategories) setCustomCategories(sData.customCategories);
+        if (sData.customUnits) setCustomUnits(sData.customUnits);
+        if (sData.gasWebhookUrl) setGasWebhookUrl(sData.gasWebhookUrl);
+      }
+
+      showToast('✓ Đã làm mới và đồng bộ dữ liệu mới nhất từ Cloud', 'success');
+    } catch (error: any) {
       console.error('Lỗi khi làm mới:', error);
+      showToast(`✗ Không thể làm mới (${error.message || 'Lỗi kết nối'})`, 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -468,7 +564,14 @@ export default function App() {
   const [auditCategory, setAuditCategory] = useState<string>('Tất cả');
   const [isEditingAudit, setIsEditingAudit] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('botanical_inventory_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [itemTransactions, setItemTransactions] = useState<LogEntry[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -488,6 +591,10 @@ export default function App() {
   const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
   const [deletePasswordInput, setDeletePasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  const [overviewSearch, setOverviewSearch] = useState('');
+  const [overviewCategory, setOverviewCategory] = useState<string>('Tất cả');
+  const [overviewTabFilter, setOverviewTabFilter] = useState<'all' | 'warning' | 'critical' | 'healthy'>('all');
+  const [overviewAlertFilter, setOverviewAlertFilter] = useState<'all' | 'critical' | 'warning'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [inventoryCategory, setInventoryCategory] = useState<string>('Tất cả');
   const [inventoryQuickFilter, setInventoryQuickFilter] = useState<'all' | 'low_stock' | 'urgent' | 'expiring'>('all');
@@ -562,7 +669,14 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const [allLogs, setAllLogs] = useState<LogEntry[]>([]);
+  const [allLogs, setAllLogs] = useState<LogEntry[]>(() => {
+    try {
+      const cached = localStorage.getItem('botanical_logs_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeReportStartDate, setActiveReportStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -614,7 +728,10 @@ export default function App() {
     } else {
       try {
         await enableNetwork(db);
-        await waitForPendingWrites(db);
+        await Promise.race([
+          waitForPendingWrites(db),
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ]);
         successMessages.push('✓ Dữ liệu cục bộ đã đồng bộ với Cloud');
       } catch (error: any) {
         errorMessages.push(`✗ Lỗi kết nối Cloud (${error.message})`);
@@ -622,18 +739,68 @@ export default function App() {
 
       // 1. Sao lưu Cloud (Firestore)
       try {
+        const sanitizedItems = items.map(item => ({
+          id: item.id || '',
+          name: item.name || '',
+          category: item.category || '',
+          unit: item.unit || '',
+          actualStock: Number(item.actualStock) || 0,
+          location: item.location || '',
+          minThreshold: item.minThreshold !== undefined ? Number(item.minThreshold) : 0,
+          maxThreshold: item.maxThreshold !== undefined ? Number(item.maxThreshold) : 0,
+          importPrice: item.importPrice !== undefined ? Number(item.importPrice) : 0,
+          description: item.description || '',
+          status: item.status || 'Ổn định',
+          auditFrequency: Array.isArray(item.auditFrequency) ? item.auditFrequency : [],
+          suppliers: Array.isArray(item.suppliers) ? item.suppliers : []
+        }));
+
+        const sanitizedLogs = allLogs.map(log => {
+          const matchedItem = items.find(i => i.id === log.id);
+          return {
+            id: log.id || '',
+            name: log.name || matchedItem?.name || '',
+            type: log.type || '',
+            category: log.category || matchedItem?.category || '',
+            amount: log.amount !== undefined ? Number(log.amount) : 0,
+            oldStock: log.oldStock !== undefined ? Number(log.oldStock) : 0,
+            newStock: log.newStock !== undefined ? Number(log.newStock) : 0,
+            reason: log.reason || '',
+            timestamp: log.timestamp || new Date().toISOString(),
+            user: log.user || 'Unknown',
+            unit: log.unit || matchedItem?.unit || '',
+            importPrice: log.importPrice !== undefined ? Number(log.importPrice) : (matchedItem?.importPrice || 0),
+            details: log.details || ''
+          };
+        });
+
         const backupData = {
           timestamp: new Date().toISOString(),
-          inventory: items,
+          inventory: sanitizedItems,
           settings: {
-            globalThreshold,
-            customCategories,
-            customUnits
+            globalThreshold: Number(globalThreshold) || 10,
+            customCategories: customCategories || [],
+            customUnits: customUnits || []
           },
-          logs: allLogs,
-          backupBy: currentUser?.username || 'System'
+          logs: sanitizedLogs,
+          backupBy: currentUser?.name || currentUser?.username || 'Nhân viên'
         };
-        await setDoc(doc(db, 'backups', `backup_${Date.now()}`), backupData);
+
+        const cleanBackupData = JSON.parse(JSON.stringify(backupData));
+        await setDoc(doc(db, 'backups', `backup_${Date.now()}`), cleanBackupData);
+        
+        // Cache local backup snapshot
+        try {
+          localStorage.setItem('botanical_last_backup', JSON.stringify({
+            timestamp: backupData.timestamp,
+            itemCount: sanitizedItems.length,
+            logCount: sanitizedLogs.length,
+            backupBy: backupData.backupBy
+          }));
+        } catch {
+          // ignore localStorage quota errors
+        }
+
         successMessages.push('✓ Firestore Cloud (Tạo bản sao lưu thành công)');
       } catch (error: any) {
         errorMessages.push(`✗ Firestore Cloud (${error.message || 'Lỗi không xác định'})`);
@@ -658,9 +825,18 @@ export default function App() {
               importPrice: item.importPrice || 0,
               description: item.description || ''
             })),
-            inboundLogs: allLogs.filter(l => l.type === 'Nhập kho'),
-            outboundLogs: allLogs.filter(l => l.type === 'Xuất kho'),
-            auditLogs: allLogs.filter(l => l.type === 'Kiểm kê')
+            inboundLogs: allLogs.filter(l => l.type === 'Nhập kho').map(log => ({
+              ...log,
+              category: log.category || items.find(i => i.id === log.id)?.category || ''
+            })),
+            outboundLogs: allLogs.filter(l => l.type === 'Xuất kho').map(log => ({
+              ...log,
+              category: log.category || items.find(i => i.id === log.id)?.category || ''
+            })),
+            auditLogs: allLogs.filter(l => l.type === 'Kiểm kê').map(log => ({
+              ...log,
+              category: log.category || items.find(i => i.id === log.id)?.category || ''
+            }))
           };
 
           const controller = new AbortController();
@@ -686,6 +862,15 @@ export default function App() {
       } else {
         errorMessages.push('✗ Apps Script Webhook (Thiếu URL cấu hình)');
       }
+
+      // 3. Background sync to Sheets API if backend service account exists
+      fetch('/api/sync/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inventory: items, logs: allLogs })
+      }).catch(() => {
+        // Optional service account sync, silently ignore if not configured
+      });
     }
 
     setIsSyncing(false);
@@ -764,8 +949,20 @@ export default function App() {
     if (!currentUser || !firebaseUser) return;
 
     const unsubscribeItems = onSnapshot(collection(db, 'inventory'), (snapshot) => {
-      const newItems = snapshot.docs.map(doc => ({ ...doc.data() as InventoryItem, id: doc.id }));
+      const seenIds = new Set<string>();
+      const newItems: InventoryItem[] = [];
+      for (const doc of snapshot.docs) {
+        const data = doc.data() as InventoryItem;
+        const itemId = doc.id || data.id;
+        if (itemId && !seenIds.has(itemId)) {
+          seenIds.add(itemId);
+          newItems.push({ ...data, id: itemId });
+        }
+      }
       setItems(newItems);
+      try {
+        localStorage.setItem('botanical_inventory_cache', JSON.stringify(newItems));
+      } catch {}
     }, (error) => handleFirestoreError(error, OperationType.GET, 'inventory'));
 
     return () => unsubscribeItems();
@@ -824,32 +1021,45 @@ export default function App() {
     };
   }, [currentUser, firebaseUser]);
 
-  // Sync All Logs for Reports/Financials
+  // Sync All Logs for Reports/Financials (Batched via Ref to avoid multiple re-renders)
+  const logStoreRef = useRef<{
+    inbound: LogEntry[];
+    outbound: LogEntry[];
+    audit: LogEntry[];
+  }>({ inbound: [], outbound: [], audit: [] });
+
+  const mergeAndSetLogs = useCallback(() => {
+    const combined = [
+      ...logStoreRef.current.inbound,
+      ...logStoreRef.current.outbound,
+      ...logStoreRef.current.audit
+    ].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    
+    setAllLogs(combined);
+    try {
+      localStorage.setItem('botanical_logs_cache', JSON.stringify(combined.slice(0, 500)));
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!currentUser || !firebaseUser) return;
 
     const unsubInbound = onSnapshot(collection(db, 'inbound_logs'), (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id, type: 'Nhập kho' } as LogEntry));
-      setAllLogs(prev => {
-        const otherLogs = prev.filter(l => l.type !== 'Nhập kho');
-        return [...otherLogs, ...logs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      });
+      logStoreRef.current.inbound = logs;
+      mergeAndSetLogs();
     }, (error) => handleFirestoreError(error, OperationType.GET, 'inbound_logs'));
 
     const unsubOutbound = onSnapshot(collection(db, 'outbound_logs'), (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id, type: 'Xuất kho' } as LogEntry));
-      setAllLogs(prev => {
-        const otherLogs = prev.filter(l => l.type !== 'Xuất kho');
-        return [...otherLogs, ...logs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      });
+      logStoreRef.current.outbound = logs;
+      mergeAndSetLogs();
     }, (error) => handleFirestoreError(error, OperationType.GET, 'outbound_logs'));
 
     const unsubAudit = onSnapshot(collection(db, 'audit_logs'), (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ ...doc.data(), docId: doc.id, type: 'Kiểm kê' } as LogEntry));
-      setAllLogs(prev => {
-        const otherLogs = prev.filter(l => l.type !== 'Kiểm kê');
-        return [...otherLogs, ...logs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      });
+      logStoreRef.current.audit = logs;
+      mergeAndSetLogs();
     }, (error) => handleFirestoreError(error, OperationType.GET, 'audit_logs'));
 
     return () => {
@@ -857,21 +1067,9 @@ export default function App() {
       unsubOutbound();
       unsubAudit();
     };
-  }, [currentUser, firebaseUser]);
+  }, [currentUser, firebaseUser, mergeAndSetLogs]);
 
-  // Test Connection
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
+
 
   const addToInboundCart = () => {
     if (!currentInbound.itemId || currentInbound.amount <= 0) return;
@@ -1565,9 +1763,99 @@ export default function App() {
 
   const inventoryHealth = useMemo(() => {
     if (items.length === 0) return 100;
-    const healthyItems = items.filter(item => item.minThreshold !== undefined && item.actualStock >= item.minThreshold).length;
+    const healthyItems = items.filter(item => (item.minThreshold !== undefined ? item.actualStock >= item.minThreshold : item.actualStock > 0)).length;
     return Math.round((healthyItems / items.length) * 100);
   }, [items]);
+
+  const criticalStockItems = useMemo(() => {
+    return items.filter(item => item.actualStock === 0);
+  }, [items]);
+
+  const warningStockItems = useMemo(() => {
+    return items.filter(item => item.actualStock > 0 && item.minThreshold !== undefined && item.actualStock <= item.minThreshold);
+  }, [items]);
+
+  const healthyStockItems = useMemo(() => {
+    return items.filter(item => (item.minThreshold !== undefined ? item.actualStock > item.minThreshold : item.actualStock > 0));
+  }, [items]);
+
+  const categoryAnalytics = useMemo(() => {
+    const rawCategories = Array.from(new Set([...customCategories, ...items.map(i => i.category)]));
+    return rawCategories.map((cat, idx) => {
+      const catItems = items.filter(i => i.category === cat);
+      const totalQty = catItems.reduce((acc, i) => acc + (i.actualStock || 0), 0);
+      const lowCount = catItems.filter(i => (i.actualStock === 0 || (i.minThreshold !== undefined && i.actualStock <= i.minThreshold))).length;
+      const totalVal = catItems.reduce((acc, i) => acc + ((i.actualStock || 0) * (i.importPrice || 0)), 0);
+      return {
+        name: cat,
+        itemCount: catItems.length,
+        totalQty: Number(totalQty.toFixed(1)),
+        lowCount,
+        totalVal,
+        colorIndex: idx
+      };
+    }).filter(c => c.itemCount > 0);
+  }, [customCategories, items]);
+
+  const recentWarehouseLogs = useMemo(() => {
+    return allLogs.slice(0, 5);
+  }, [allLogs]);
+
+  const overviewFilteredItems = useMemo(() => {
+    let result = items;
+
+    if (overviewCategory !== 'Tất cả') {
+      result = result.filter(i => i.category === overviewCategory);
+    }
+
+    if (overviewTabFilter === 'critical') {
+      result = result.filter(i => i.actualStock === 0);
+    } else if (overviewTabFilter === 'warning') {
+      result = result.filter(i => i.actualStock > 0 && i.minThreshold !== undefined && i.actualStock <= i.minThreshold);
+    } else if (overviewTabFilter === 'healthy') {
+      result = result.filter(i => (i.minThreshold !== undefined ? i.actualStock > i.minThreshold : i.actualStock > 0));
+    }
+
+    if (!overviewSearch.trim()) return result;
+
+    const normalized = removeAccents(overviewSearch.toLowerCase().trim());
+    return result.filter(item => {
+      const name = removeAccents((item.name || '').toLowerCase());
+      const cat = removeAccents((item.category || '').toLowerCase());
+      const loc = removeAccents((item.location || '').toLowerCase());
+      const desc = removeAccents((item.description || '').toLowerCase());
+      return name.includes(normalized) || cat.includes(normalized) || loc.includes(normalized) || desc.includes(normalized);
+    });
+  }, [items, overviewCategory, overviewTabFilter, overviewSearch]);
+
+  const getCategoryIcon = (category: string) => {
+    const lower = (category || '').toLowerCase();
+    if (lower.includes('thảo mộc') || lower.includes('lá') || lower.includes('hoa') || lower.includes('rễ') || lower.includes('thực vật')) {
+      return Leaf;
+    }
+    if (lower.includes('pha chế') || lower.includes('trà') || lower.includes('nước') || lower.includes('uống')) {
+      return Coffee;
+    }
+    if (lower.includes('vệ sinh') || lower.includes('khử trùng') || lower.includes('rửa')) {
+      return Droplets;
+    }
+    if (lower.includes('vật tư') || lower.includes('bao bì') || lower.includes('chai') || lower.includes('lọ') || lower.includes('thùng')) {
+      return Boxes;
+    }
+    return Package;
+  };
+
+  const getCategoryColorStyle = (index: number) => {
+    const styles = [
+      { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/20' },
+      { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-500/20' },
+      { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/20' },
+      { bg: 'bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-500/20' },
+      { bg: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/20' },
+      { bg: 'bg-teal-500/10', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-500/20' }
+    ];
+    return styles[index % styles.length];
+  };
 
   const totalStockWeight = useMemo(() => {
     return items.reduce((acc, item) => acc + item.actualStock, 0).toFixed(1);
@@ -1664,58 +1952,31 @@ export default function App() {
     if (!auditSearchQuery) return categoryFiltered;
     
     const normalizedQuery = removeAccents(auditSearchQuery);
-    const auditFuse = new Fuse(categoryFiltered.map(item => ({
-      ...item,
-      normalizedName: removeAccents(item.name),
-    })), {
-      keys: ['name', 'normalizedName'],
-      threshold: 0.3,
-    });
-    
-    return auditFuse.search(normalizedQuery).map((result: any) => result.item);
-  }, [auditSearchQuery, items, auditType, auditCategory, isEditingAudit]);
+    const results = fuse.search(normalizedQuery);
+    const matchedIds = new Set(results.map((result: any) => result.item.id));
+    return categoryFiltered.filter(item => matchedIds.has(item.id));
+  }, [auditSearchQuery, items, auditType, auditCategory, isEditingAudit, fuse]);
 
   const auditSearchSuggestions = useMemo(() => {
     if (!auditSearchQuery || auditSearchQuery.length < 2) return [];
     const normalizedQuery = removeAccents(auditSearchQuery);
-    const auditFuse = new Fuse(items.map(item => ({
-      ...item,
-      normalizedName: removeAccents(item.name),
-    })), {
-      keys: ['name', 'normalizedName'],
-      threshold: 0.3,
-    });
-    const results = auditFuse.search(normalizedQuery);
+    const results = fuse.search(normalizedQuery);
     return results.slice(0, 5).map((r: any) => r.item);
-  }, [auditSearchQuery, items]);
+  }, [auditSearchQuery, fuse]);
 
   const inboundSearchSuggestions = useMemo(() => {
     if (!inboundSearchQuery || inboundSearchQuery.length < 2) return [];
     const normalizedQuery = removeAccents(inboundSearchQuery);
-    const inboundFuse = new Fuse(items.map(item => ({
-      ...item,
-      normalizedName: removeAccents(item.name),
-    })), {
-      keys: ['name', 'normalizedName'],
-      threshold: 0.3,
-    });
-    const results = inboundFuse.search(normalizedQuery);
+    const results = fuse.search(normalizedQuery);
     return results.slice(0, 5).map((r: any) => r.item);
-  }, [inboundSearchQuery, items]);
+  }, [inboundSearchQuery, fuse]);
 
   const outboundSearchSuggestions = useMemo(() => {
     if (!outboundSearchQuery || outboundSearchQuery.length < 2) return [];
     const normalizedQuery = removeAccents(outboundSearchQuery);
-    const outboundFuse = new Fuse(items.map(item => ({
-      ...item,
-      normalizedName: removeAccents(item.name),
-    })), {
-      keys: ['name', 'normalizedName'],
-      threshold: 0.3,
-    });
-    const results = outboundFuse.search(normalizedQuery);
+    const results = fuse.search(normalizedQuery);
     return results.slice(0, 5).map((r: any) => r.item);
-  }, [outboundSearchQuery, items]);
+  }, [outboundSearchQuery, fuse]);
 
   const selectedItem = useMemo(() => {
     return items.find(i => i.id === selectedItemId) || items[0];
@@ -2351,6 +2612,14 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRefresh}
+                  disabled={isSyncing}
+                  className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center active:scale-90 transition-all text-[#1C1C1E] disabled:opacity-50"
+                  title="Làm mới & Đồng bộ dữ liệu"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-apple-blue' : ''}`} />
+                </button>
                 {currentUser?.role === 'quản lí' && currentScreen === 'overview' && (
                   <button 
                     onClick={() => navigateTo('settings')}
@@ -2372,6 +2641,7 @@ export default function App() {
         )}
 
       <main className={`w-full ${currentScreen === 'login' ? 'p-0 flex-1 flex flex-col' : 'px-6 py-4 md:px-12 md:py-8'}`}>
+        <ToastNotification toast={toastMessage} onClose={() => setToastMessage(null)} />
         <PullToRefresh onRefresh={handleRefresh}>
           <AnimatePresence mode="wait">
           {currentScreen === 'login' && (
@@ -2470,197 +2740,794 @@ export default function App() {
           {currentScreen === 'overview' && currentUser?.role === 'quản lí' && (
             <motion.div 
               key="overview"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -15 }}
+              className="space-y-7 pb-20"
             >
-              {/* Low Stock Alerts */}
-              {lowStockItems.length > 0 && (
-                <div className="bg-red-50/80 border border-red-500/20 rounded-3xl p-6 relative overflow-hidden shadow-sm">
-                  <div className="absolute -top-6 -right-6 p-8 opacity-[0.03]">
-                    <AlertTriangle className="w-40 h-40 text-red-600" />
-                  </div>
-                  
-                  <div className="flex flex-col gap-5 relative z-10">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
-                          <AlertTriangle className="w-6 h-6 text-red-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-red-600">Cần nhập thêm hàng</h3>
-                          <p className="text-sm font-medium text-red-600/80 mt-0.5">
-                            {lowStockItems.length} mặt hàng dưới ngưỡng tồn kho an toàn
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pr-1 pb-1">
-                      {lowStockItems.map(item => (
-                        <div 
-                          key={item.id}
-                          onClick={() => {
-                            setSelectedItemId(item.id);
-                            navigateTo('details');
-                          }}
-                          className="bg-white rounded-2xl p-4 flex items-center gap-4 cursor-pointer shadow-sm border border-red-100/50 hover:border-red-500/30 hover:shadow-md transition-all group"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-[#1C1C1E] truncate text-[15px]">{item.name}</h4>
-                            <div className="flex items-center gap-2 mt-2">
-                              <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg">
-                                Tồn: {item.actualStock} {item.unit}
-                              </span>
-                              <div className="w-1 h-1 rounded-full bg-black/10"></div>
-                              <span className="text-xs font-medium text-apple-gray flex items-center gap-1">
-                                Ngưỡng: {item.minThreshold}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center group-hover:bg-red-50 transition-colors">
-                            <ChevronRight className="w-4 h-4 text-apple-gray group-hover:text-red-500 transition-colors" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {/* 1. TOP EXECUTIVE STATUS BANNER */}
+              <div className="apple-card p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-[#1E293B] to-slate-900 text-white relative overflow-hidden shadow-lg border-0">
+                {/* Decorative botanical watermark */}
+                <div className="absolute -right-6 -bottom-10 opacity-10 pointer-events-none">
+                  <Leaf className="w-56 h-56 text-emerald-400" />
                 </div>
-              )}
-
-              {/* Hero Section */}
-              <div className="grid grid-cols-1 gap-6">
-                <div className="apple-card bg-gradient-to-br from-apple-blue to-[#5856D6] relative overflow-hidden flex min-h-[220px]">
-                  {/* One-line herb decoration */}
-                  <div className="one-line-herb -bottom-8 -right-8 w-48 h-48 rotate-45">
-                    <svg viewBox="0 0 100 100" className="w-full h-full stroke-white fill-none opacity-20">
-                      <path d="M10,90 Q40,40 90,10 M30,80 Q50,60 70,40 M50,90 Q70,70 90,50" strokeWidth="0.5" />
-                    </svg>
-                  </div>
-
-                  <div className="flex-1 p-8 z-10 flex flex-col justify-between text-white">
-                    <div>
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                          <BarChart3 className="w-4 h-4 text-white" />
-                        </div>
-                        <h2 className="font-semibold text-xs uppercase tracking-wider opacity-80">Sức khỏe kho hàng</h2>
-                      </div>
-                      <div className="mt-2">
-                        <div className="text-6xl font-bold tracking-tighter">{inventoryHealth}%</div>
-                        <p className="text-white/70 mt-4 font-medium text-sm">Tổng tồn: {totalStockWeight} {items[0]?.unit || 'đơn vị'}</p>
-                      </div>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Hệ thống Vận Hành Kho Dược Liệu
+                      </span>
+                      <span className="text-slate-500 font-mono text-xs">·</span>
+                      <span className="text-xs text-slate-300 font-medium">Thời gian thực</span>
                     </div>
+                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                      Tổng quan trạng thái lưu kho
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-300">
+                      {criticalStockItems.length > 0 ? (
+                        <span className="text-red-300 font-medium flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-red-400 inline shrink-0" />
+                          Cảnh báo: Có {criticalStockItems.length} mặt hàng đã hết nhẵn và {warningStockItems.length} mặt hàng chạm ngưỡng an toàn.
+                        </span>
+                      ) : warningStockItems.length > 0 ? (
+                        <span className="text-amber-300 font-medium flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 inline shrink-0" />
+                          Lưu ý: Có {warningStockItems.length} mặt hàng cần xem xét đặt hàng bổ sung.
+                        </span>
+                      ) : (
+                        <span className="text-emerald-300 font-medium flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-400 inline shrink-0" />
+                          Kho hàng ổn định: Toàn bộ {items.length} mặt hàng đang duy trì định mức an toàn.
+                        </span>
+                      )}
+                    </p>
                   </div>
-                  
-                  <div className="absolute right-8 bottom-8 z-20">
-                    <button 
-                      onClick={() => navigateTo('add')}
-                      className="w-14 h-14 bg-white text-apple-blue rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-all duration-300"
+
+                  <div className="flex items-center gap-2.5 shrink-0 pt-2 md:pt-0">
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isSyncing}
+                      className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-xs font-semibold text-white flex items-center gap-2 border border-white/10"
+                      title="Làm mới dữ liệu từ Cloud"
                     >
-                      <Plus size={28} strokeWidth={3} />
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                      <span>{isSyncing ? 'Đang tải...' : 'Làm mới'}</span>
+                    </button>
+                    <button
+                      onClick={() => navigateTo('report')}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-xs font-semibold text-white flex items-center gap-1.5 shadow-sm shadow-emerald-500/30"
+                    >
+                      <span>Báo cáo chi tiết</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Categories */}
-              <section className="space-y-6">
-                <div className="flex items-center justify-between px-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-5 bg-apple-green rounded-full"></div>
-                    <h2 className="text-sm font-bold text-[#1C1C1E]">Danh mục chính</h2>
+              {/* 2. CORE KPI CARDS (4 EXECUTIVE METRICS) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Card 1: Sức khỏe tồn kho */}
+                <div className="apple-card p-5 flex flex-col justify-between relative overflow-hidden">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
+                        Sức khỏe kho
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className="text-3xl font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight">
+                          {inventoryHealth}%
+                        </span>
+                        <span className={`text-xs font-bold ${inventoryHealth >= 80 ? 'text-emerald-600' : inventoryHealth >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {inventoryHealth >= 80 ? 'Tối ưu' : inventoryHealth >= 50 ? 'Cảnh báo' : 'Nguy cấp'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${inventoryHealth >= 80 ? 'bg-emerald-500/10 text-emerald-600' : inventoryHealth >= 50 ? 'bg-amber-500/10 text-amber-600' : 'bg-red-500/10 text-red-600'}`}>
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => navigateTo('inventory')}
-                    className="text-[11px] font-bold text-apple-blue bg-apple-blue/5 px-3 py-1 rounded-full active:scale-95 transition-all"
-                  >
-                    Xem tất cả
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { name: 'Thảo mộc thô', icon: Leaf, count: items.filter(i => i.category === 'Thảo mộc thô').length },
-                    { name: 'Pha chế', icon: Coffee, count: items.filter(i => i.category === 'Pha chế').length },
-                    { name: 'Vật tư', icon: Boxes, count: items.filter(i => i.category === 'Vật tư').length },
-                    { name: 'Vệ sinh', icon: Droplets, count: items.filter(i => i.category === 'Vệ sinh').length },
-                  ].map((cat) => (
-                    <motion.div 
-                      key={cat.name} 
-                      whileHover={{ y: -4 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSearchQuery(cat.name)}
-                      className={`relative overflow-hidden p-6 apple-card flex flex-col justify-between min-h-[140px] transition-all duration-300 border-2 ${searchQuery === cat.name ? 'border-apple-blue bg-apple-blue/5' : 'border-transparent'}`}
-                    >
-                      {/* One-line herb decoration */}
-                      <div className="one-line-herb -top-2 -right-2 w-16 h-16 opacity-5">
-                        <svg viewBox="0 0 100 100" className="w-full h-full stroke-apple-green fill-none">
-                          <path d="M50,10 Q50,50 90,90 M10,50 Q50,50 90,10" strokeWidth="1" />
-                        </svg>
-                      </div>
 
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${searchQuery === cat.name ? 'bg-apple-blue text-white' : 'bg-apple-blue/5'}`}>
-                        <cat.icon className={`w-6 h-6 ${searchQuery === cat.name ? 'text-white' : 'text-apple-blue'}`} />
+                  <div className="mt-4 space-y-1.5">
+                    {/* Multi-segment progress bar */}
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden flex">
+                      <div 
+                        style={{ width: `${items.length > 0 ? (healthyStockItems.length / items.length) * 100 : 100}%` }} 
+                        className="bg-emerald-500 h-full transition-all duration-500"
+                        title={`An toàn: ${healthyStockItems.length}`}
+                      />
+                      <div 
+                        style={{ width: `${items.length > 0 ? (warningStockItems.length / items.length) * 100 : 0}%` }} 
+                        className="bg-amber-500 h-full transition-all duration-500"
+                        title={`Tồn thấp: ${warningStockItems.length}`}
+                      />
+                      <div 
+                        style={{ width: `${items.length > 0 ? (criticalStockItems.length / items.length) * 100 : 0}%` }} 
+                        className="bg-red-500 h-full transition-all duration-500"
+                        title={`Hết hàng: ${criticalStockItems.length}`}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-medium text-apple-gray">
+                      <span>{healthyStockItems.length}/{items.length} SKU an toàn</span>
+                      <span>{items.length - healthyStockItems.length} cần chú ý</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Tổng giá trị hàng hóa */}
+                <div 
+                  onClick={() => navigateTo('financial')}
+                  className="apple-card p-5 flex flex-col justify-between cursor-pointer hover:border-apple-blue/30 transition-all group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
+                        Giá trị lưu kho
+                      </span>
+                      <div className="mt-2">
+                        <span className="text-2xl sm:text-[26px] font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight">
+                          {totalInventoryValue.toLocaleString('vi-VN')}
+                        </span>
+                        <span className="text-xs font-bold text-apple-gray ml-1">VNĐ</span>
                       </div>
-                      <div className="relative z-10">
-                        <span className={`block font-bold text-sm transition-colors ${searchQuery === cat.name ? 'text-apple-blue' : 'text-[#1C1C1E]'}`}>{cat.name}</span>
-                        <span className="text-[11px] font-medium text-apple-gray">{cat.count} mặt hàng</span>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-blue-500/10 text-apple-blue flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium">
+                    <span className="text-apple-gray">Ước tính theo giá vốn</span>
+                    <span className="text-apple-blue font-semibold flex items-center gap-0.5 group-hover:underline">
+                      Sổ tài chính <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card 3: Cảnh báo cần nhập hàng */}
+                <div 
+                  onClick={() => {
+                    if (lowStockItems.length > 0) {
+                      setOverviewTabFilter(overviewTabFilter === 'warning' ? 'all' : 'warning');
+                      const alertSection = document.getElementById('priority-alerts-section');
+                      if (alertSection) alertSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className={`apple-card p-5 flex flex-col justify-between cursor-pointer transition-all ${lowStockItems.length > 0 ? 'hover:border-red-400/40' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
+                        Cảnh báo tồn kho
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className={`text-3xl font-extrabold font-mono tabular-nums tracking-tight ${lowStockItems.length > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {lowStockItems.length}
+                        </span>
+                        <span className="text-xs font-bold text-apple-gray">mặt hàng</span>
                       </div>
-                    </motion.div>
-                  ))}
+                    </div>
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${lowStockItems.length > 0 ? 'bg-red-500/10 text-red-600 animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium">
+                    <span className="text-red-600 font-semibold">
+                      {criticalStockItems.length} hết nhẵn
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-amber-600 font-semibold">
+                      {warningStockItems.length} sắp hết
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card 4: Tổng mã hàng & Lưu trữ */}
+                <div 
+                  onClick={() => navigateTo('inventory')}
+                  className="apple-card p-5 flex flex-col justify-between cursor-pointer hover:border-purple-400/30 transition-all group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
+                        Quy mô kho
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className="text-3xl font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight">
+                          {items.length}
+                        </span>
+                        <span className="text-xs font-bold text-apple-gray">mã SKU</span>
+                      </div>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Boxes className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium">
+                    <span className="text-apple-gray truncate max-w-[140px]">
+                      Tổng: {totalStockWeight} {items[0]?.unit || 'đơn vị'}
+                    </span>
+                    <span className="text-purple-600 font-semibold flex items-center gap-0.5 group-hover:underline">
+                      Xem danh mục <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. QUICK OPERATIONS WORKFLOW (4 LỐI TẮT NGHIỆP VỤ) */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-apple-blue rounded-full"></div>
+                    <h3 className="text-sm font-bold text-[#1C1C1E] uppercase tracking-wider">
+                      Thao tác nghiệp vụ nhanh
+                    </h3>
+                  </div>
+                  <span className="text-xs text-apple-gray">Quy trình kho tiêu chuẩn</span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <button
+                    onClick={() => navigateTo('inbound')}
+                    className="apple-card p-4 text-left hover:border-emerald-500/30 hover:shadow-md active:scale-95 transition-all group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                      <ArrowDownCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-[#1C1C1E] group-hover:text-emerald-600 transition-colors">
+                        Nhập kho
+                      </h4>
+                      <p className="text-[11px] text-apple-gray mt-0.5 line-clamp-1">
+                        Thêm lô hàng & giá vốn
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigateTo('outbound')}
+                    className="apple-card p-4 text-left hover:border-apple-blue/30 hover:shadow-md active:scale-95 transition-all group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-apple-blue flex items-center justify-center group-hover:bg-apple-blue group-hover:text-white transition-colors">
+                      <ArrowUpCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-[#1C1C1E] group-hover:text-apple-blue transition-colors">
+                        Xuất kho
+                      </h4>
+                      <p className="text-[11px] text-apple-gray mt-0.5 line-clamp-1">
+                        Xuất dùng & pha chế
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigateTo('audit')}
+                    className="apple-card p-4 text-left hover:border-purple-500/30 hover:shadow-md active:scale-95 transition-all group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                      <ClipboardList className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-[#1C1C1E] group-hover:text-purple-600 transition-colors">
+                        Kiểm kê kho
+                      </h4>
+                      <p className="text-[11px] text-apple-gray mt-0.5 line-clamp-1">
+                        Khớp tồn thực tế & sổ sách
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigateTo('add')}
+                    className="apple-card p-4 text-left hover:border-slate-500/30 hover:shadow-md active:scale-95 transition-all group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                      <Plus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-[#1C1C1E] group-hover:text-slate-900 transition-colors">
+                        Thêm mới
+                      </h4>
+                      <p className="text-[11px] text-apple-gray mt-0.5 line-clamp-1">
+                        Đăng ký dược liệu & ngưỡng
+                      </p>
+                    </div>
+                  </button>
                 </div>
               </section>
 
-              {/* Recent Items */}
-              <section>
-                <div className="apple-card overflow-hidden">
-                  <div className="p-6 bg-white/40 border-b border-black/5 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <Archive className="w-5 h-5 text-apple-gray" />
-                      <h3 className="font-bold text-[#1C1C1E]">
-                        {searchQuery ? `Kết quả cho "${searchQuery}"` : `Kho vật tư (${items.length} mục)`}
-                      </h3>
-                    </div>
-                    {searchQuery && (
-                      <button 
-                        onClick={() => setSearchQuery('')}
-                        className="text-[11px] font-bold text-apple-blue bg-apple-blue/10 px-3 py-1 rounded-full"
-                      >
-                        Xóa lọc
-                      </button>
-                    )}
+              {/* 4. PRIORITY STOCK ALERTS (CẢNH BÁO TỒN KHO ƯU TIÊN) */}
+              <section id="priority-alerts-section" className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-1.5 h-4 rounded-full ${lowStockItems.length > 0 ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
+                    <h3 className="text-sm font-bold text-[#1C1C1E] uppercase tracking-wider flex items-center gap-2">
+                      Cảnh báo tồn kho ưu tiên
+                      {lowStockItems.length > 0 && (
+                        <span className="text-xs font-extrabold px-2 py-0.5 rounded-md bg-red-100 text-red-700 font-mono">
+                          {lowStockItems.length}
+                        </span>
+                      )}
+                    </h3>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-2">
-                    {filteredItems.length > 0 ? (
-                      filteredItems.map((item) => (
-                        <div 
-                          key={item.id} 
-                          onClick={() => navigateTo('details', item.id)}
-                          className="p-5 flex items-center justify-between hover:bg-black/5 transition-colors cursor-pointer rounded-2xl border border-transparent hover:border-black/5"
+
+                  {lowStockItems.length > 0 && (
+                    <div className="flex items-center gap-1.5 bg-black/5 p-1 rounded-xl self-start sm:self-auto">
+                      <button
+                        onClick={() => setOverviewAlertFilter('all')}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                          overviewAlertFilter === 'all' 
+                            ? 'bg-white text-[#1C1C1E] shadow-sm' 
+                            : 'text-apple-gray hover:text-[#1C1C1E]'
+                        }`}
+                      >
+                        Tất cả ({lowStockItems.length})
+                      </button>
+                      <button
+                        onClick={() => setOverviewAlertFilter('critical')}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                          overviewAlertFilter === 'critical' 
+                            ? 'bg-red-600 text-white shadow-sm' 
+                            : 'text-red-600 hover:bg-red-50'
+                        }`}
+                      >
+                        Hết nhẵn ({criticalStockItems.length})
+                      </button>
+                      <button
+                        onClick={() => setOverviewAlertFilter('warning')}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                          overviewAlertFilter === 'warning' 
+                            ? 'bg-amber-600 text-white shadow-sm' 
+                            : 'text-amber-600 hover:bg-amber-50'
+                        }`}
+                      >
+                        Sắp hết ({warningStockItems.length})
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {lowStockItems.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {(overviewAlertFilter === 'critical' 
+                      ? criticalStockItems 
+                      : overviewAlertFilter === 'warning' 
+                      ? warningStockItems 
+                      : lowStockItems
+                    ).map((item, idx) => {
+                      const isCritical = item.actualStock === 0;
+                      const percent = item.minThreshold && item.minThreshold > 0 
+                        ? Math.min(Math.round((item.actualStock / item.minThreshold) * 100), 100) 
+                        : 0;
+                      return (
+                        <div
+                          key={`${item.id}-${idx}`}
+                          className={`apple-card p-4 flex flex-col justify-between border-2 transition-all hover:shadow-md ${
+                            isCritical 
+                              ? 'border-red-300/80 bg-red-50/20' 
+                              : 'border-amber-300/70 bg-amber-50/15'
+                          }`}
                         >
-                          <div className="flex items-center gap-4">
-                            <div>
-                              <h4 className="font-bold text-[#1C1C1E]">{item.name}</h4>
-                              <p className="text-xs text-apple-gray truncate max-w-[150px]">{item.description}</p>
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-[#1C1C1E] text-sm truncate">
+                                  {item.name}
+                                </h4>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-apple-gray">
+                                  <span>{item.category}</span>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="font-medium text-slate-700">
+                                    {item.location ? `Vị trí: ${item.location}` : 'Chưa xếp vị trí'}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 font-mono ${
+                                isCritical 
+                                  ? 'bg-red-100 text-red-700 border border-red-200' 
+                                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}>
+                                {isCritical ? 'Hết hàng' : 'Tồn thấp'}
+                              </span>
+                            </div>
+
+                            {/* Stock vs Threshold gauge */}
+                            <div className="mt-3.5 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-slate-700">
+                                  Hiện có: <strong className={`font-mono tabular-nums ${isCritical ? 'text-red-600' : 'text-amber-700'}`}>{item.actualStock} {item.unit}</strong>
+                                </span>
+                                <span className="text-apple-gray font-mono text-[11px]">
+                                  Mức tối thiểu: {item.minThreshold || 0} {item.unit}
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                <div 
+                                  style={{ width: `${percent}%` }}
+                                  className={`h-full rounded-full transition-all duration-300 ${isCritical ? 'bg-red-500 w-0' : 'bg-amber-500'}`}
+                                />
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className={`block font-bold text-lg ${item.status === 'Tồn thấp' ? 'text-red-500' : 'text-apple-blue'}`}>
-                              {item.actualStock} {item.unit?.toLowerCase() || ''}
-                            </span>
-                            <span className={`text-xs font-bold uppercase tracking-tighter ${item.status === 'Tồn thấp' ? 'text-red-500' : 'text-apple-gray'}`}>
-                              {item.status === 'Tồn thấp' ? 'Cần nhập gấp' : `Vị trí: ${item.location || 'N/A'}`}
-                            </span>
+
+                          <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedItemId(item.id);
+                                navigateTo('details');
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-black/5 hover:bg-black/10 text-xs font-semibold text-slate-700 transition-colors"
+                            >
+                              Xem hồ sơ
+                            </button>
+                            <button
+                              onClick={() => {
+                                setInboundCart([{
+                                  itemId: item.id,
+                                  amount: Math.max((item.minThreshold || 10) * 2 - item.actualStock, 1),
+                                  reason: 'Bổ sung tồn kho khẩn cấp'
+                                }]);
+                                navigateTo('inbound');
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors shadow-sm flex items-center gap-1"
+                            >
+                              <ArrowDownCircle className="w-3.5 h-3.5" />
+                              <span>Nhập thêm</span>
+                            </button>
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <div className="p-12 text-center">
-                        <div className="w-16 h-16 bg-black/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Search className="w-8 h-8 text-apple-gray" />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="apple-card p-6 bg-emerald-50/40 border border-emerald-200/50 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-emerald-900">
+                        Toàn bộ kho hàng đang ở mức định mức an toàn
+                      </h4>
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        Không có mặt hàng nào bị thiếu hụt hoặc vượt ngưỡng cảnh báo tối thiểu.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* 5. DYNAMIC CATEGORY INTELLIGENCE & DISTRIBUTION */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-apple-green rounded-full"></div>
+                    <h3 className="text-sm font-bold text-[#1C1C1E] uppercase tracking-wider">
+                      Phân bổ theo nhóm danh mục ({categoryAnalytics.length})
+                    </h3>
+                  </div>
+                  {overviewCategory !== 'Tất cả' && (
+                    <button
+                      onClick={() => setOverviewCategory('Tất cả')}
+                      className="text-xs font-semibold text-apple-blue hover:underline"
+                    >
+                      Bỏ lọc danh mục
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {categoryAnalytics.map((cat) => {
+                    const IconComponent = getCategoryIcon(cat.name);
+                    const colorStyle = getCategoryColorStyle(cat.colorIndex);
+                    const isSelected = overviewCategory === cat.name;
+                    return (
+                      <div
+                        key={cat.name}
+                        onClick={() => {
+                          setOverviewCategory(isSelected ? 'Tất cả' : cat.name);
+                        }}
+                        className={`apple-card p-4 flex flex-col justify-between cursor-pointer transition-all duration-200 border-2 ${
+                          isSelected 
+                            ? 'border-apple-blue bg-blue-50/20 shadow-md ring-2 ring-apple-blue/20' 
+                            : 'hover:border-black/10 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${colorStyle.bg} ${colorStyle.text}`}>
+                            <IconComponent className="w-5 h-5" />
+                          </div>
+                          {cat.lowCount > 0 ? (
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-mono">
+                              {cat.lowCount} thiếu
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-emerald-600 font-mono">
+                              ✓ Đạt
+                            </span>
+                          )}
                         </div>
-                        <p className="text-apple-gray font-medium">Không tìm thấy dược liệu nào khớp với "{searchQuery}"</p>
+
+                        <div className="mt-3">
+                          <h4 className="font-bold text-sm text-[#1C1C1E] truncate">
+                            {cat.name}
+                          </h4>
+                          <div className="flex items-center justify-between text-xs text-apple-gray mt-1">
+                            <span className="font-semibold text-slate-700 font-mono tabular-nums">{cat.itemCount} SKU</span>
+                            <span className="font-mono tabular-nums">{cat.totalQty} đv</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* 6. RECENT WAREHOUSE ACTIVITY (NHẬT KÝ GIAO DỊCH GẦN ĐÂY) */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-purple-500 rounded-full"></div>
+                    <h3 className="text-sm font-bold text-[#1C1C1E] uppercase tracking-wider">
+                      Hoạt động xuất nhập gần đây
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => navigateTo('report')}
+                    className="text-xs font-semibold text-apple-blue hover:underline flex items-center gap-1"
+                  >
+                    <span>Xem toàn bộ nhật ký ({allLogs.length})</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="apple-card overflow-hidden">
+                  {recentWarehouseLogs.length > 0 ? (
+                    <div className="divide-y divide-black/5">
+                      {recentWarehouseLogs.map((log, idx) => {
+                        const isInbound = log.type === 'Nhập kho';
+                        const isOutbound = log.type === 'Xuất kho';
+                        const isAudit = log.type === 'Kiểm kê';
+                        return (
+                          <div
+                            key={log.docId ? `${log.docId}-${idx}` : `log-${log.type}-${log.id || 'entry'}-${idx}`}
+                            className="p-4 sm:px-5 flex items-center justify-between gap-3 hover:bg-black/[0.02] transition-colors"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                                isInbound 
+                                  ? 'bg-emerald-500/10 text-emerald-600' 
+                                  : isOutbound 
+                                  ? 'bg-blue-500/10 text-apple-blue' 
+                                  : 'bg-purple-500/10 text-purple-600'
+                              }`}>
+                                {isInbound && <ArrowDownCircle className="w-5 h-5" />}
+                                {isOutbound && <ArrowUpCircle className="w-5 h-5" />}
+                                {isAudit && <ClipboardList className="w-5 h-5" />}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                                    isInbound ? 'text-emerald-700' : isOutbound ? 'text-blue-700' : 'text-purple-700'
+                                  }`}>
+                                    {log.type}
+                                  </span>
+                                  <span className="text-slate-300">·</span>
+                                  <h5 className="font-bold text-sm text-[#1C1C1E] truncate">
+                                    {log.name}
+                                  </h5>
+                                </div>
+                                <p className="text-xs text-apple-gray mt-0.5 truncate">
+                                  <span>{log.timestamp}</span>
+                                  <span className="mx-1.5 text-slate-300">·</span>
+                                  <span>Thực hiện: <strong className="text-slate-700 font-medium">{log.user}</strong></span>
+                                  {log.reason && (
+                                    <>
+                                      <span className="mx-1.5 text-slate-300">·</span>
+                                      <span className="italic">{log.reason}</span>
+                                    </>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              {isInbound && (
+                                <span className="font-bold text-sm text-emerald-600 font-mono tabular-nums">
+                                  +{log.amount} {log.unit}
+                                </span>
+                              )}
+                              {isOutbound && (
+                                <span className="font-bold text-sm text-apple-blue font-mono tabular-nums">
+                                  -{log.amount} {log.unit}
+                                </span>
+                              )}
+                              {isAudit && (
+                                <span className="font-bold text-sm text-purple-600 font-mono tabular-nums">
+                                  {log.newStock} {log.unit}
+                                </span>
+                              )}
+                              {log.importPrice && isInbound && (
+                                <span className="block text-[11px] text-apple-gray font-mono">
+                                  {((log.amount || 0) * log.importPrice).toLocaleString('vi-VN')} đ
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <div className="w-12 h-12 bg-black/5 rounded-2xl flex items-center justify-center mx-auto mb-2 text-apple-gray">
+                        <History className="w-6 h-6" />
+                      </div>
+                      <p className="text-sm font-medium text-apple-gray">Chưa có giao dịch kho nào được ghi nhận</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* 7. QUICK INVENTORY EXPLORER (TRA CỨU & DANH MỤC TRỰC TIẾP) */}
+              <section className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-slate-800 rounded-full"></div>
+                    <h3 className="text-sm font-bold text-[#1C1C1E] uppercase tracking-wider">
+                      Tra cứu kho & danh mục mặt hàng ({overviewFilteredItems.length})
+                    </h3>
+                  </div>
+
+                  {/* Status filter tabs */}
+                  <div className="flex items-center gap-1 bg-black/5 p-1 rounded-xl self-start sm:self-auto">
+                    <button
+                      onClick={() => setOverviewTabFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        overviewTabFilter === 'all' 
+                          ? 'bg-white text-[#1C1C1E] shadow-sm' 
+                          : 'text-apple-gray hover:text-[#1C1C1E]'
+                      }`}
+                    >
+                      Tất cả ({items.length})
+                    </button>
+                    <button
+                      onClick={() => setOverviewTabFilter('warning')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        overviewTabFilter === 'warning' 
+                          ? 'bg-amber-600 text-white shadow-sm' 
+                          : 'text-apple-gray hover:text-amber-700'
+                      }`}
+                    >
+                      Cần nhập ({lowStockItems.length})
+                    </button>
+                    <button
+                      onClick={() => setOverviewTabFilter('healthy')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        overviewTabFilter === 'healthy' 
+                          ? 'bg-emerald-600 text-white shadow-sm' 
+                          : 'text-apple-gray hover:text-emerald-700'
+                      }`}
+                    >
+                      An toàn ({healthyStockItems.length})
+                    </button>
+                  </div>
+                </div>
+
+                <div className="apple-card p-4 sm:p-5 space-y-4">
+                  {/* Search and Category Filter Bar */}
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-apple-gray absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={overviewSearch}
+                        onChange={(e) => setOverviewSearch(e.target.value)}
+                        placeholder="Tìm theo tên dược liệu, vị trí kệ, quy cách..."
+                        className="w-full pl-10 pr-9 py-2.5 bg-black/5 rounded-xl text-sm font-medium text-[#1C1C1E] placeholder:text-apple-gray/70 focus:outline-none focus:ring-2 focus:ring-apple-blue/30 transition-all"
+                      />
+                      {overviewSearch && (
+                        <button
+                          onClick={() => setOverviewSearch('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/10 flex items-center justify-center text-apple-gray hover:text-black"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <select
+                      value={overviewCategory}
+                      onChange={(e) => setOverviewCategory(e.target.value)}
+                      className="px-3.5 py-2.5 bg-black/5 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-apple-blue/30"
+                    >
+                      <option value="Tất cả">Tất cả danh mục ({items.length})</option>
+                      {categoryAnalytics.map(c => (
+                        <option key={c.name} value={c.name}>
+                          {c.name} ({c.itemCount})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Items Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {overviewFilteredItems.length > 0 ? (
+                      overviewFilteredItems.map((item, idx) => {
+                        const isZero = item.actualStock === 0;
+                        const isLow = item.minThreshold !== undefined && item.actualStock <= item.minThreshold;
+                        return (
+                          <div
+                            key={`${item.id}-${idx}`}
+                            onClick={() => {
+                              setSelectedItemId(item.id);
+                              navigateTo('details');
+                            }}
+                            className="p-4 rounded-2xl border border-black/5 bg-black/[0.01] hover:bg-black/[0.04] hover:border-black/10 cursor-pointer transition-all group flex flex-col justify-between"
+                          >
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <h5 className="font-bold text-sm text-[#1C1C1E] group-hover:text-apple-blue transition-colors truncate">
+                                    {item.name}
+                                  </h5>
+                                  <div className="flex items-center gap-1.5 text-xs text-apple-gray mt-0.5">
+                                    <span className="truncate">{item.category}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="text-slate-600 font-medium truncate">
+                                      {item.location ? item.location : 'Chưa xếp kệ'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md font-mono shrink-0 ${
+                                  isZero 
+                                    ? 'bg-red-100 text-red-700' 
+                                    : isLow 
+                                    ? 'bg-amber-100 text-amber-800' 
+                                    : 'bg-emerald-50 text-emerald-700'
+                                }`}>
+                                  {isZero ? 'Hết hàng' : isLow ? 'Tồn thấp' : 'Đạt'}
+                                </span>
+                              </div>
+
+                              {/* Stock Metric */}
+                              <div className="mt-3 flex items-baseline justify-between">
+                                <span className="text-xs text-apple-gray">Tồn thực tế:</span>
+                                <span className={`font-mono font-bold text-base tabular-nums ${
+                                  isZero ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-[#1C1C1E]'
+                                }`}>
+                                  {item.actualStock} <span className="text-xs font-medium text-apple-gray">{item.unit}</span>
+                                </span>
+                              </div>
+
+                              {/* Threshold info */}
+                              <div className="flex items-center justify-between text-[11px] text-apple-gray font-mono mt-1">
+                                <span>Ngưỡng tối thiểu: {item.minThreshold ?? '—'}</span>
+                                {item.importPrice ? (
+                                  <span>{item.importPrice.toLocaleString('vi-VN')} đ/{item.unit}</span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs text-apple-blue font-semibold">
+                              <span>Xem chi tiết mặt hàng</span>
+                              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-full py-12 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center mx-auto mb-2 text-apple-gray">
+                          <Search className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-700">Không tìm thấy dược liệu phù hợp</p>
+                        <p className="text-xs text-apple-gray mt-1">
+                          Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -2734,9 +3601,9 @@ export default function App() {
                 />
                 {auditSearchSuggestions.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl z-[60] overflow-hidden border border-black/5">
-                    {auditSearchSuggestions.map(item => (
+                    {auditSearchSuggestions.map((item, idx) => (
                       <button 
-                        key={item.id}
+                        key={`${item.id}-${idx}`}
                         onClick={() => {
                           setAuditSearchQuery('');
                           const element = document.getElementById(`audit-item-${item.id}`);
@@ -2824,7 +3691,7 @@ export default function App() {
                 {filteredAuditItems.length > 0 ? (
                   filteredAuditItems.map((item, _index) => (
                     <div 
-                      key={item.id} 
+                      key={`${item.id}-${_index}`} 
                       onClick={() => isEditingAudit && toggleAuditFrequency(item.id, auditType)}
                       className={`apple-card p-6 flex flex-col justify-between min-h-[160px] transition-all duration-300 relative ${
                         isEditingAudit 
@@ -3164,9 +4031,9 @@ export default function App() {
                       />
                       {inboundSearchSuggestions.length > 0 && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl z-[60] overflow-hidden border border-black/5">
-                          {inboundSearchSuggestions.map(item => (
+                          {inboundSearchSuggestions.map((item, idx) => (
                             <button 
-                              key={item.id}
+                              key={`${item.id}-${idx}`}
                               onClick={() => {
                                 setInboundSearchQuery('');
                                 setCurrentInbound(prev => ({ ...prev, itemId: item.id }));
@@ -3407,9 +4274,9 @@ export default function App() {
                       />
                       {outboundSearchSuggestions.length > 0 && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl z-[60] overflow-hidden border border-black/5">
-                          {outboundSearchSuggestions.map(item => (
+                          {outboundSearchSuggestions.map((item, idx) => (
                             <button 
-                              key={item.id}
+                              key={`${item.id}-${idx}`}
                               onClick={() => {
                                 setOutboundSearchQuery('');
                                 setCurrentOutbound(prev => ({ ...prev, itemId: item.id }));
@@ -4693,8 +5560,8 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4">
-                  {items.sort((a, b) => ((b.actualStock * (b.importPrice || 0)) - (a.actualStock * (a.importPrice || 0)))).map(item => (
-                    <div key={item.id} className="apple-card p-5 flex items-center gap-5 active:scale-[0.98] transition-all">
+                  {[...items].sort((a, b) => ((b.actualStock * (b.importPrice || 0)) - (a.actualStock * (a.importPrice || 0)))).map((item, idx) => (
+                    <div key={`${item.id}-${idx}`} className="apple-card p-5 flex items-center gap-5 active:scale-[0.98] transition-all">
                       <div className="flex-1">
                         <h4 className="font-bold text-[#1C1C1E] text-lg leading-tight">{item.name}</h4>
                         <div className="flex items-center gap-2 mt-1">
@@ -4793,8 +5660,8 @@ export default function App() {
                     </button>
                   </div>
                 )}
-                {items.map(item => (
-                  <div key={item.id} className="apple-card p-6 space-y-5">
+                {items.map((item, idx) => (
+                  <div key={`${item.id}-${idx}`} className="apple-card p-6 space-y-5">
                     <div className="flex flex-col gap-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -4934,9 +5801,9 @@ export default function App() {
                   )}
                   {searchSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl z-[60] overflow-hidden border border-black/5">
-                      {searchSuggestions.map(item => (
+                      {searchSuggestions.map((item, idx) => (
                         <button 
-                          key={item.id}
+                          key={`${item.id}-${idx}`}
                           onClick={() => {
                             setSelectedItemId(item.id);
                             navigateTo('details');
@@ -4996,9 +5863,9 @@ export default function App() {
 
               <div className="grid grid-cols-1 gap-3">
                 {filteredItems.length > 0 ? (
-                  filteredItems.map((item) => (
+                  filteredItems.map((item, idx) => (
                     <SwipeableLogItem
-                      key={item.id}
+                      key={`${item.id}-${idx}`}
                       onEdit={() => navigateTo('edit', item.id)}
                       onDelete={() => {
                         setSelectedItemId(item.id);
