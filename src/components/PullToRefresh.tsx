@@ -5,9 +5,10 @@ import { RefreshCw } from 'lucide-react';
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
   children: React.ReactNode;
+  disabled?: boolean;
 }
 
-const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) => {
+const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, disabled = false }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullProgress, setPullProgress] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -17,65 +18,96 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) =>
   const startY = useRef(0);
   const currentY = useRef(0);
   const isDragging = useRef(false);
-  const isScrollingTrapped = useRef(false);
+  const isAborted = useRef(false);
   const PULL_THRESHOLD = 80;
 
+  // Check if viewport is truly at the top of the page
+  const isAtTop = () => {
+    const winY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const containerY = containerRef.current?.scrollTop || 0;
+    return winY <= 1 && containerY <= 1;
+  };
+
   const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (containerRef.current?.scrollTop === 0 && !isRefreshing) {
+    if (disabled || isRefreshing) return;
+    
+    // ONLY initiate drag if user touches when already at the absolute top of the page
+    if (isAtTop()) {
       startX.current = e.touches[0].clientX;
       startY.current = e.touches[0].clientY;
+      currentY.current = e.touches[0].clientY;
       isDragging.current = true;
-      isScrollingTrapped.current = false;
+      isAborted.current = false;
+    } else {
+      isDragging.current = false;
+      isAborted.current = true;
     }
-  }, [isRefreshing]);
+  }, [disabled, isRefreshing]);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (!isDragging.current || isRefreshing) return;
+    if (!isDragging.current || isAborted.current || isRefreshing || disabled) return;
 
     const currentX = e.touches[0].clientX;
-    currentY.current = e.touches[0].clientY;
+    const currentYVal = e.touches[0].clientY;
+    currentY.current = currentYVal;
     
     const diffX = Math.abs(currentX - startX.current);
-    const diffY = Math.abs(currentY.current - startY.current);
-    const actualDiffY = currentY.current - startY.current;
+    const actualDiffY = currentYVal - startY.current;
 
-    // Fast bail out of pull-to-refresh if horizontal scrolling is detected
-    if (diffX > diffY && diffX > 5) {
-      isScrollingTrapped.current = true;
-    }
-
-    if (isScrollingTrapped.current) return;
-
-    if (actualDiffY > 0 && containerRef.current?.scrollTop === 0) {
-      // Prevent native scroll when pulling down at the top
-      if (e.cancelable) e.preventDefault();
-      
-      const progress = Math.min(actualDiffY / PULL_THRESHOLD, 1.5); // Allow slight over-pull
-      setPullProgress(Math.min(progress, 1));
-      
-      // Use requestAnimationFrame for smooth visual updates
-      requestAnimationFrame(() => {
-        if (contentRef.current) {
-          // Apply a resistance curve
-          const translateY = Math.min(actualDiffY * 0.4, PULL_THRESHOLD);
-          contentRef.current.style.transform = `translateY(${translateY}px)`;
-        }
-      });
-    }
-  }, [isRefreshing]);
-
-  const handleTouchEnd = useCallback(async () => {
-    if (!isDragging.current) return;
-    isDragging.current = false;
-    
-    if (isScrollingTrapped.current) {
-      isScrollingTrapped.current = false;
+    // If swiping upwards (scrolling down into page), ABORT IMMEDIATELY!
+    // Never trap or interfere with downward page scrolling
+    if (actualDiffY < 0) {
+      isDragging.current = false;
+      isAborted.current = true;
+      setPullProgress(0);
+      if (contentRef.current) contentRef.current.style.transform = '';
       return;
     }
 
+    // If horizontal motion exceeds vertical motion, user is swiping horizontally (tabs, carousel, swipeable item)
+    if (diffX > actualDiffY && diffX > 8) {
+      isDragging.current = false;
+      isAborted.current = true;
+      setPullProgress(0);
+      if (contentRef.current) contentRef.current.style.transform = '';
+      return;
+    }
+
+    // Double check that we didn't scroll down
+    if (!isAtTop()) {
+      isDragging.current = false;
+      isAborted.current = true;
+      setPullProgress(0);
+      if (contentRef.current) contentRef.current.style.transform = '';
+      return;
+    }
+
+    // Only when pulling down from the top:
+    if (actualDiffY > 0) {
+      // Prevent browser default overscroll only when we are genuinely handling the pull
+      if (e.cancelable) e.preventDefault();
+      
+      const progress = Math.min(actualDiffY / PULL_THRESHOLD, 1.5);
+      setPullProgress(Math.min(progress, 1));
+      
+      if (contentRef.current) {
+        const translateY = Math.min(actualDiffY * 0.4, PULL_THRESHOLD);
+        contentRef.current.style.transform = `translateY(${translateY}px)`;
+      }
+    }
+  }, [disabled, isRefreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!isDragging.current || isAborted.current || disabled) {
+      isDragging.current = false;
+      isAborted.current = false;
+      return;
+    }
+    isDragging.current = false;
+
     const diff = currentY.current - startY.current;
 
-    if (diff >= PULL_THRESHOLD && !isRefreshing && containerRef.current?.scrollTop === 0) {
+    if (diff >= PULL_THRESHOLD && !isRefreshing && isAtTop()) {
       setIsRefreshing(true);
       setPullProgress(1);
       
@@ -92,7 +124,10 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) =>
         if (contentRef.current) {
           contentRef.current.style.transform = 'translateY(0px)';
           setTimeout(() => {
-            if (contentRef.current) contentRef.current.style.transition = '';
+            if (contentRef.current) {
+              contentRef.current.style.transition = '';
+              contentRef.current.style.transform = '';
+            }
           }, 300);
         }
       }
@@ -102,14 +137,17 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) =>
         contentRef.current.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
         contentRef.current.style.transform = 'translateY(0px)';
         setTimeout(() => {
-          if (contentRef.current) contentRef.current.style.transition = '';
+          if (contentRef.current) {
+            contentRef.current.style.transition = '';
+            contentRef.current.style.transform = '';
+          }
         }, 300);
       }
     }
     
     startY.current = 0;
     currentY.current = 0;
-  }, [isRefreshing, onRefresh]);
+  }, [disabled, isRefreshing, onRefresh]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -118,39 +156,40 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) =>
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     return () => {
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   return (
-    <div className="relative overflow-hidden h-full flex flex-col">
+    <div className="relative w-full flex-1 flex flex-col">
       <motion.div
-        className="absolute top-0 left-0 right-0 flex justify-center items-center h-20 z-10 pointer-events-none"
+        className="absolute top-0 left-0 right-0 flex justify-center items-center h-16 z-20 pointer-events-none"
         style={{
           opacity: isRefreshing ? 1 : pullProgress,
           y: isRefreshing ? 0 : -20 + (pullProgress * 20),
         }}
       >
-        <div className="bg-white/80 backdrop-blur-md p-2 rounded-full shadow-lg border border-black/5">
+        <div className="bg-white/90 backdrop-blur-md p-2.5 rounded-full shadow-lg border border-black/5">
           <motion.div
             animate={isRefreshing ? { rotate: 360 } : { rotate: pullProgress * 360 }}
             transition={isRefreshing ? { repeat: Infinity, duration: 1, ease: "linear" } : { type: "spring" }}
           >
-            <RefreshCw className={`w-6 h-6 ${isRefreshing ? 'text-apple-blue' : 'text-apple-gray'}`} />
+            <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'text-apple-blue' : 'text-apple-gray'}`} />
           </motion.div>
         </div>
       </motion.div>
 
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto overscroll-y-none custom-scrollbar"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="w-full flex-1"
       >
-        <div ref={contentRef} className="min-h-full">
+        <div ref={contentRef} className="w-full min-h-full">
           {children}
         </div>
       </div>

@@ -24,42 +24,67 @@ const SwipeableLogItem: React.FC<SwipeableLogItemProps> = ({
   const actionWidth = 120; // 60px per button
 
   const startX = useRef(0);
+  const startY = useRef(0);
   const currentX = useRef(0);
   const isDragging = useRef(false);
+  const gestureDirection = useRef<'horizontal' | 'vertical' | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (disabled) return;
     startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    currentX.current = e.touches[0].clientX;
     isDragging.current = true;
+    gestureDirection.current = null;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging.current || disabled) return;
-    currentX.current = e.touches[0].clientX;
-    const diff = currentX.current - startX.current;
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
+    currentX.current = clientX;
+    
+    const diffX = clientX - startX.current;
+    const diffY = clientY - startY.current;
 
-    // Only allow dragging left
-    if (diff < 0) {
-      // Prevent default to stop scrolling while swiping horizontally
-      if (Math.abs(diff) > 10 && e.cancelable) {
-        // We can't preventDefault in React synthetic events easily if passive: true
-        // But we rely on touchAction: 'pan-y' to handle this mostly.
+    // Detect direction on initial movement threshold (8px)
+    if (gestureDirection.current === null) {
+      if (Math.abs(diffX) > 8 || Math.abs(diffY) > 8) {
+        if (Math.abs(diffX) > Math.abs(diffY)) {
+          gestureDirection.current = 'horizontal';
+        } else {
+          // Detected vertical scrolling: disengage completely so page can scroll freely!
+          gestureDirection.current = 'vertical';
+          isDragging.current = false;
+          return;
+        }
+      } else {
+        return;
       }
-      const newX = Math.max(diff, -actionWidth - 20); // Add some elasticity
+    }
+
+    if (gestureDirection.current !== 'horizontal') return;
+
+    // Only allow dragging left (or right to close if already revealed)
+    if (diffX < 0) {
+      const newX = Math.max(diffX, -actionWidth - 20); // Add slight elasticity
       controls.set({ x: isRevealed ? -actionWidth + newX : newX });
-    } else if (isRevealed && diff > 0) {
-      const newX = Math.min(-actionWidth + diff, 0);
+    } else if (isRevealed && diffX > 0) {
+      const newX = Math.min(-actionWidth + diffX, 0);
       controls.set({ x: newX });
     }
   };
 
   const handleTouchEnd = () => {
-    if (!isDragging.current || disabled) return;
+    if (!isDragging.current || disabled || gestureDirection.current !== 'horizontal') {
+      isDragging.current = false;
+      gestureDirection.current = null;
+      return;
+    }
     isDragging.current = false;
+    gestureDirection.current = null;
 
     const diff = currentX.current - startX.current;
-
-    // Use a more standard iOS-like spring
     const springConfig = { type: "spring", stiffness: 450, damping: 35 } as const;
 
     if (!isRevealed && diff < -actionWidth / 2) {
@@ -109,7 +134,7 @@ const SwipeableLogItem: React.FC<SwipeableLogItemProps> = ({
 
   return (
     <div
-      className="relative w-full overflow-hidden rounded-2xl bg-black/5"
+      className="relative w-full overflow-hidden rounded-2xl bg-black/5 select-none"
       ref={containerRef}
     >
       {/* Background Actions - iOS Style */}
@@ -147,6 +172,7 @@ const SwipeableLogItem: React.FC<SwipeableLogItemProps> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         className="relative z-10 w-full rounded-2xl bg-white"
         style={{ touchAction: "pan-y" }}
       >

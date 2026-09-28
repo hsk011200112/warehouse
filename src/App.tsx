@@ -48,7 +48,9 @@ import {
   Package,
   ArrowUpRight,
   CheckCircle,
-  RefreshCw
+  RefreshCw,
+  ClipboardCheck,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -173,12 +175,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onClose }: any) => (
   <AnimatePresence>
     {isOpen && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm overflow-y-auto">
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
-          className="bg-white rounded-[32px] p-8 w-full max-w-sm shadow-2xl"
+          className="bg-white rounded-[32px] p-8 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto"
         >
           <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-6">
             <AlertCircle size={32} />
@@ -224,9 +226,9 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen, currentUser, currentScreen, naviga
           animate={{ x: 0 }}
           exit={{ x: '-100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="fixed top-0 left-0 bottom-0 w-72 z-[90] bg-white shadow-2xl flex flex-col p-8"
+          className="fixed top-0 left-0 bottom-0 w-72 z-[90] bg-white shadow-2xl flex flex-col p-8 overflow-y-auto no-scrollbar"
         >
-          <div className="flex items-center gap-3 mb-12">
+          <div className="flex items-center gap-3 mb-8 shrink-0">
             <div className="w-12 h-12 bg-apple-blue rounded-2xl flex items-center justify-center shadow-lg shadow-apple-blue/20">
               <Leaf className="text-white w-6 h-6" />
             </div>
@@ -236,7 +238,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen, currentUser, currentScreen, naviga
             </div>
           </div>
 
-          <nav className="flex-1 space-y-2">
+          <nav className="flex-1 space-y-2 overflow-y-auto no-scrollbar py-1">
             {[
               { id: 'overview', label: 'Tổng quan', icon: LayoutGrid, managerOnly: true },
               { id: 'inventory', label: 'Danh mục kho', icon: Boxes },
@@ -254,7 +256,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen, currentUser, currentScreen, naviga
                 <button
                   key={item.id}
                   onClick={() => {
-                    navigateTo(item.id as Screen);
+                    navigateTo(item.id as Screen, null, { isTabSwitch: true });
                     setIsMenuOpen(false);
                   }}
                   className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${
@@ -270,7 +272,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen, currentUser, currentScreen, naviga
             })}
           </nav>
 
-          <div className="pt-8 border-t border-black/5">
+          <div className="pt-6 border-t border-black/5 shrink-0 mt-4">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center overflow-hidden">
                 <UserIcon size={20} className="text-apple-gray" />
@@ -369,6 +371,7 @@ export default function App() {
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
   const [screenHistory, setScreenHistory] = useState<Screen[]>(['login']);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -470,12 +473,110 @@ export default function App() {
     }
   };
 
-  const navigateTo = (screen: Screen, itemId: string | null = null) => {
+  // Xác định màn hình gốc (Home) theo vai trò người dùng
+  const getHomeScreen = useCallback((): Screen => {
+    return currentUser?.role === 'nhân viên' ? 'audit' : 'overview';
+  }, [currentUser?.role]);
+
+  // Tiêu đề trực quan cho từng màn hình
+  const getScreenTitle = useCallback((screen: Screen): string => {
+    switch (screen) {
+      case 'overview': return 'Tổng quan';
+      case 'inventory': return 'Danh mục kho';
+      case 'inbound': return 'Nhập kho';
+      case 'outbound': return 'Xuất kho';
+      case 'audit': return 'Kiểm kê';
+      case 'report': return 'Báo cáo';
+      case 'financial': return 'Tài chính';
+      case 'suppliers': return 'Mua hàng';
+      case 'settings': return 'Cài đặt';
+      case 'details': return 'Chi tiết';
+      case 'edit': return 'Chỉnh sửa';
+      case 'add': return 'Thêm mới';
+      default: return '';
+    }
+  }, []);
+
+  // Cấu trúc phân cấp màn hình cha mẹ khi lịch sử nông hoặc chuyển hướng trực tiếp
+  const getParentScreen = useCallback((screen: Screen): Screen => {
+    const home = getHomeScreen();
+    switch (screen) {
+      case 'edit':
+        return selectedItemId ? 'details' : 'inventory';
+      case 'details':
+        return 'inventory';
+      case 'add':
+        return 'inventory';
+      case 'financial':
+      case 'report':
+      case 'suppliers':
+        return 'overview';
+      case 'inbound':
+      case 'outbound':
+      case 'inventory':
+      case 'settings':
+        return home;
+      case 'audit':
+        return currentUser?.role === 'quản lí' ? 'overview' : 'audit';
+      case 'overview':
+        return 'overview';
+      default:
+        return home;
+    }
+  }, [getHomeScreen, selectedItemId, currentUser?.role]);
+
+  const navigateTo = useCallback((screen: Screen, itemId: string | null = null, options?: { replace?: boolean; isTabSwitch?: boolean }) => {
+    // Chặn nhân viên truy cập các màn hình quản lý tài chính, mua hàng, báo cáo
+    if ((screen === 'financial' || screen === 'suppliers' || screen === 'report') && currentUser?.role !== 'quản lí') {
+      return;
+    }
     if (itemId) setSelectedItemId(itemId);
-    setScreenHistory(prev => [...prev, screen]);
+
+    // Nếu đang ở đúng màn hình và cùng mặt hàng thì chỉ cuộn lên đầu
+    if (screen === currentScreen && (!itemId || itemId === selectedItemId)) {
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    const home = getHomeScreen();
+
+    setScreenHistory(prev => {
+      // Nếu trở về màn hình gốc Home, làm sạch stack chỉ còn [home]
+      if (screen === home) {
+        return [home];
+      }
+
+      // Nếu chuyển tab ngang từ thanh Sidebar
+      if (options?.isTabSwitch) {
+        // Luôn neo Home làm gốc, nên ấn Back từ tab bất kỳ sẽ trở về Home
+        return [home, screen];
+      }
+
+      // Nếu yêu cầu replace màn hình hiện tại
+      if (options?.replace && prev.length > 0) {
+        const next = [...prev];
+        next[next.length - 1] = screen;
+        return next;
+      }
+
+      // Tránh vòng lặp luẩn quẩn (A -> B -> A -> B): nếu màn hình đích đã có sẵn trong stack, tua ngược về nó
+      const existingIdx = prev.lastIndexOf(screen);
+      if (existingIdx !== -1) {
+        return prev.slice(0, existingIdx + 1);
+      }
+
+      // Tránh trùng lặp liên tiếp
+      if (prev[prev.length - 1] === screen) {
+        return prev;
+      }
+
+      // Điều hướng đi sâu (drilldown): đẩy vào stack
+      return [...prev, screen];
+    });
+
     setCurrentScreen(screen);
     window.scrollTo(0, 0);
-  };
+  }, [currentUser?.role, currentScreen, selectedItemId, getHomeScreen]);
 
   const notifyManagers = async (title: string, body: string, url: string = '/') => {
     try {
@@ -503,20 +604,57 @@ export default function App() {
     }
   };
 
-  const goBack = () => {
-    if (screenHistory.length > 1) {
-      const newHistory = [...screenHistory];
-      newHistory.pop(); // Remove current screen
-      const prevScreen = newHistory[newHistory.length - 1];
-      setScreenHistory(newHistory);
-      setCurrentScreen(prevScreen);
-      window.scrollTo(0, 0);
-    } else {
-      const defaultScreen = currentUser?.role === 'nhân viên' ? 'audit' : 'overview';
-      setCurrentScreen(defaultScreen);
-      setScreenHistory([defaultScreen]);
+  const goBack = useCallback(() => {
+    const home = getHomeScreen();
+
+    setScreenHistory(prev => {
+      if (prev.length > 1) {
+        const next = [...prev];
+        next.pop(); // Gỡ bỏ màn hình hiện tại
+        const target = next[next.length - 1];
+
+        // Kiểm tra an toàn: nếu màn hình trước đó bị hạn chế với nhân viên
+        if ((target === 'financial' || target === 'suppliers' || target === 'report') && currentUser?.role !== 'quản lí') {
+          setCurrentScreen(home);
+          return [home];
+        }
+
+        setCurrentScreen(target);
+        return next;
+      } else {
+        // Khi stack chỉ còn 1 hoặc rỗng, dùng phân cấp cha mẹ thông minh
+        const parent = getParentScreen(currentScreen);
+        if (parent !== currentScreen) {
+          setCurrentScreen(parent);
+          return [home, parent];
+        } else {
+          setCurrentScreen(home);
+          return [home];
+        }
+      }
+    });
+
+    window.scrollTo(0, 0);
+  }, [getHomeScreen, getParentScreen, currentScreen, currentUser?.role]);
+
+  // Đồng bộ với phím Back vật lý / cử chỉ vuốt Back trên trình duyệt di động
+  useEffect(() => {
+    const handlePopState = () => {
+      const home = currentUser?.role === 'nhân viên' ? 'audit' : 'overview';
+      if (currentScreen !== home) {
+        goBack();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentScreen, currentUser?.role, goBack]);
+
+  // Tự động chuyển nhân viên về màn hình an toàn nếu đang ở trang quản lý
+  useEffect(() => {
+    if (currentUser?.role === 'nhân viên' && (currentScreen === 'financial' || currentScreen === 'suppliers' || currentScreen === 'report')) {
+      setCurrentScreen('audit');
     }
-  };
+  }, [currentUser?.role, currentScreen]);
 
   // Components - Moved outside
 
@@ -563,7 +701,6 @@ export default function App() {
   };
   const [auditCategory, setAuditCategory] = useState<string>('Tất cả');
   const [isEditingAudit, setIsEditingAudit] = useState(false);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [items, setItems] = useState<InventoryItem[]>(() => {
     try {
       const cached = localStorage.getItem('botanical_inventory_cache');
@@ -648,6 +785,15 @@ export default function App() {
     return [];
   });
 
+  // Quick Audit states on Inventory Catalog
+  const [isQuickAuditMode, setIsQuickAuditMode] = useState(false);
+  const [quickAuditInputs, setQuickAuditInputs] = useState<Record<string, number>>({});
+  const [quickAuditSavingId, setQuickAuditSavingId] = useState<string | null>(null);
+  const [isQuickAuditBatchSaving, setIsQuickAuditBatchSaving] = useState(false);
+  const [quickAuditOnlyChanged, setQuickAuditOnlyChanged] = useState(false);
+  const [recentlySavedItemIds, setRecentlySavedItemIds] = useState<Record<string, boolean>>({});
+  const [quickAuditSingleItemId, setQuickAuditSingleItemId] = useState<string | null>(null);
+
   const [currentInbound, setCurrentInbound] = useState({
     itemId: '',
     amount: 0,
@@ -697,19 +843,44 @@ export default function App() {
   const [activeFinancialStartDate, setActiveFinancialStartDate] = useState(financialStartDate);
   const [activeFinancialEndDate, setActiveFinancialEndDate] = useState(financialEndDate);
 
+  // Scroll to top immediately whenever currentScreen changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [currentScreen]);
+
+  // Lock background scroll when modals or sidebar are open
+  const isAnyModalOpen = isMenuOpen || confirmModal.isOpen || !!editingLog || showConfirmModal || showSupplierModal || showDeletePasswordModal;
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isAnyModalOpen]);
+
   // Export to Excel
   const exportToExcel = () => {
-    const data = items.map(item => ({
-      'Tên': item.name,
-      'Danh mục': item.category,
-      'Đơn vị': item.unit,
-      'Tồn kho thực tế': item.actualStock,
-      'Vị trí': item.location || 'N/A',
-      'Ngưỡng tối thiểu': item.minThreshold || 0,
-      'Ngưỡng tối đa': item.maxThreshold || 0,
-      'Giá nhập': item.importPrice || 0,
-      'Mô tả': item.description || ''
-    }));
+    const isManager = currentUser?.role === 'quản lí';
+    const data = items.map(item => {
+      const row: Record<string, any> = {
+        'Tên': item.name,
+        'Danh mục': item.category,
+        'Đơn vị': item.unit,
+        'Tồn kho thực tế': item.actualStock,
+        'Vị trí': item.location || 'N/A',
+        'Ngưỡng tối thiểu': item.minThreshold || 0,
+        'Ngưỡng tối đa': item.maxThreshold || 0,
+      };
+      if (isManager) {
+        row['Giá nhập'] = item.importPrice || 0;
+      }
+      row['Mô tả'] = item.description || '';
+      return row;
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -932,7 +1103,9 @@ export default function App() {
           }
 
           if (currentScreen === 'login') {
-            setCurrentScreen(userData.role === 'quản lí' ? 'overview' : 'audit');
+            const initial = userData.role === 'quản lí' ? 'overview' : 'audit';
+            setCurrentScreen(initial);
+            setScreenHistory([initial]);
           }
         } catch (e) {
           console.error('Auth initialization error:', e);
@@ -1549,6 +1722,201 @@ export default function App() {
     }
   };
 
+  const handleQuickAuditSaveSingle = async (item: InventoryItem) => {
+    const newStock = quickAuditInputs[item.id] !== undefined ? quickAuditInputs[item.id] : item.actualStock;
+    const oldStock = item.actualStock;
+    const diff = newStock - oldStock;
+
+    try {
+      setQuickAuditSavingId(item.id);
+      const itemRef = doc(db, 'inventory', item.id);
+      await updateDoc(itemRef, { actualStock: newStock });
+
+      const now = formatDate(new Date());
+      const auditLog: LogEntry = {
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        theoreticalStock: oldStock,
+        actualStock: newStock,
+        unit: item.unit,
+        type: 'Kiểm kê',
+        timestamp: now,
+        user: currentUser?.name || 'Nhân viên',
+        reason: diff === 0 ? 'Khớp tồn kho (Kiểm kê nhanh)' : (diff > 0 ? 'Thừa hàng (Kiểm kê nhanh)' : 'Thiếu hàng (Kiểm kê nhanh)'),
+        oldStock: oldStock,
+        newStock: newStock,
+        details: diff !== 0 
+          ? `Kiểm kê nhanh tại danh mục: Điều chỉnh từ ${oldStock} sang ${newStock} (${diff > 0 ? '+' : ''}${diff} ${item.unit})`
+          : `Kiểm kê nhanh tại danh mục: Xác nhận khớp tồn kho (${newStock} ${item.unit})`
+      };
+
+      const logRef = doc(collection(db, 'audit_logs'));
+      await setDoc(logRef, auditLog);
+
+      // Background Sheets sync
+      const updatedList = items.map(i => i.id === item.id ? { ...i, actualStock: newStock } : i);
+      fetch('/api/sync/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inventory: updatedList })
+      }).catch(err => console.error('Background sync failed:', err));
+
+      // Background GAS sync
+      if (gasWebhookUrl) {
+        fetch(gasWebhookUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'log_inventory_change',
+            logs: [{
+              ...auditLog,
+              category: item.category,
+              price: item.importPrice,
+              stockAfter: newStock,
+              amount: Math.abs(diff),
+              type: diff >= 0 ? 'Nhập kho (Kiểm kê thừa)' : 'Xuất kho (Kiểm kê thiếu)',
+              reason: auditLog.reason
+            }]
+          })
+        }).catch(err => console.error('Background GAS sync failed:', err));
+      }
+
+      if (newStock > 0 && newStock <= (item.minThreshold || (newStock < globalThreshold ? globalThreshold : 0))) {
+        notifyManagers('Cảnh báo tồn kho thấp', `${item.name} sắp hết hàng (còn ${newStock} ${item.unit}) sau kiểm kê nhanh`, '/inventory');
+      }
+
+      setRecentlySavedItemIds(prev => ({ ...prev, [item.id]: true }));
+      setTimeout(() => {
+        setRecentlySavedItemIds(prev => {
+          const next = { ...prev };
+          delete next[item.id];
+          return next;
+        });
+      }, 2500);
+
+      if (quickAuditSingleItemId === item.id) {
+        setQuickAuditSingleItemId(null);
+      }
+
+      showToast(`✓ Đã cập nhật tồn kho "${item.name}": ${newStock} ${item.unit}`, 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `inventory/${item.id}`);
+      showToast(`✗ Lỗi khi lưu kiểm kê: ${(error as any)?.message || 'Không thành công'}`, 'error');
+    } finally {
+      setQuickAuditSavingId(null);
+    }
+  };
+
+  const handleQuickAuditSaveAll = async () => {
+    const modifiedItems = items.filter(item => {
+      const val = quickAuditInputs[item.id];
+      return val !== undefined && val !== item.actualStock;
+    });
+
+    if (modifiedItems.length === 0) {
+      showToast('Không có mặt hàng nào thay đổi số lượng để lưu.', 'info');
+      return;
+    }
+
+    try {
+      setIsQuickAuditBatchSaving(true);
+      const batch = writeBatch(db);
+      const now = formatDate(new Date());
+      const auditLogs: LogEntry[] = [];
+
+      modifiedItems.forEach(item => {
+        const newStock = quickAuditInputs[item.id];
+        const oldStock = item.actualStock;
+        const diff = newStock - oldStock;
+
+        const itemRef = doc(db, 'inventory', item.id);
+        batch.update(itemRef, { actualStock: newStock });
+
+        const log: LogEntry = {
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          theoreticalStock: oldStock,
+          actualStock: newStock,
+          unit: item.unit,
+          type: 'Kiểm kê',
+          timestamp: now,
+          user: currentUser?.name || 'Nhân viên',
+          reason: diff > 0 ? 'Thừa hàng (Kiểm kê nhanh)' : 'Thiếu hàng (Kiểm kê nhanh)',
+          oldStock: oldStock,
+          newStock: newStock,
+          details: `Kiểm kê nhanh hàng loạt: Điều chỉnh từ ${oldStock} sang ${newStock} (${diff > 0 ? '+' : ''}${diff} ${item.unit})`
+        };
+
+        const logRef = doc(collection(db, 'audit_logs'));
+        batch.set(logRef, log);
+        auditLogs.push(log);
+      });
+
+      await batch.commit();
+
+      const updatedList = items.map(initialItem => {
+        const match = modifiedItems.find(m => m.id === initialItem.id);
+        if (match) {
+          return { ...initialItem, actualStock: quickAuditInputs[initialItem.id] };
+        }
+        return initialItem;
+      });
+
+      fetch('/api/sync/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inventory: updatedList })
+      }).catch(err => console.error('Background sync failed:', err));
+
+      if (gasWebhookUrl && auditLogs.length > 0) {
+        fetch(gasWebhookUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'log_inventory_change',
+            logs: auditLogs.map(log => {
+              const item = items.find(i => i.id === log.id);
+              const diff = (log.actualStock ?? 0) - (log.theoreticalStock ?? 0);
+              return {
+                ...log,
+                category: item?.category || '',
+                price: item?.importPrice,
+                stockAfter: (log.actualStock ?? 0),
+                amount: Math.abs(diff),
+                type: diff > 0 ? 'Nhập kho (Kiểm kê thừa)' : 'Xuất kho (Kiểm kê thiếu)',
+                reason: log.reason
+              };
+            })
+          })
+        }).catch(err => console.error('Background GAS sync failed:', err));
+      }
+
+      notifyManagers(
+        'Hoàn tất kiểm kê nhanh',
+        `${currentUser?.name || 'Nhân viên'} vừa cập nhật kiểm kê nhanh cho ${modifiedItems.length} dược liệu tại danh mục kho.`,
+        '/inventory'
+      );
+
+      const nextInputs: Record<string, number> = {};
+      updatedList.forEach(i => {
+        nextInputs[i.id] = i.actualStock;
+      });
+      setQuickAuditInputs(nextInputs);
+      setQuickAuditOnlyChanged(false);
+
+      showToast(`✓ Đã lưu thành công kiểm kê nhanh cho ${modifiedItems.length} dược liệu!`, 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'inventory');
+      showToast(`✗ Lỗi lưu kiểm kê nhanh: ${(error as any)?.message || 'Thất bại'}`, 'error');
+    } finally {
+      setIsQuickAuditBatchSaving(false);
+    }
+  };
+
   const handleAddPurchaseCart = (item: InventoryItem) => {
     const amountStr = purchaseInput[item.id];
     const amount = Number(amountStr);
@@ -1917,33 +2285,48 @@ export default function App() {
       });
     }
     
-    if (!searchQuery) return baseItems;
-    
-    const normalizedQuery = removeAccents(searchQuery);
-    const results = fuse.search(normalizedQuery);
-    
-    const matchedItems = results.map(result => result.item);
-    
-    let filteredMatched = matchedItems;
-    if (inventoryCategory !== 'Tất cả') {
-      filteredMatched = filteredMatched.filter(i => i.category === inventoryCategory);
+    let matched = baseItems;
+    if (searchQuery) {
+      const normalizedQuery = removeAccents(searchQuery);
+      const results = fuse.search(normalizedQuery);
+      const matchedItems = results.map(result => result.item);
+      
+      let filteredMatched = matchedItems;
+      if (inventoryCategory !== 'Tất cả') {
+        filteredMatched = filteredMatched.filter(i => i.category === inventoryCategory);
+      }
+      if (inventoryQuickFilter === 'low_stock') {
+        filteredMatched = filteredMatched.filter(i => i.actualStock > 0 && i.minThreshold !== undefined && i.actualStock <= i.minThreshold);
+      } else if (inventoryQuickFilter === 'urgent') {
+        filteredMatched = filteredMatched.filter(i => i.actualStock === 0);
+      } else if (inventoryQuickFilter === 'expiring') {
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        filteredMatched = filteredMatched.filter(i => {
+          if (!i.expiryDate) return false;
+          const expiry = new Date(i.expiryDate);
+          return expiry <= thirtyDaysFromNow && i.actualStock > 0;
+        });
+      }
+      matched = filteredMatched;
     }
-    if (inventoryQuickFilter === 'low_stock') {
-      filteredMatched = filteredMatched.filter(i => i.actualStock > 0 && i.minThreshold !== undefined && i.actualStock <= i.minThreshold);
-    } else if (inventoryQuickFilter === 'urgent') {
-      filteredMatched = filteredMatched.filter(i => i.actualStock === 0);
-    } else if (inventoryQuickFilter === 'expiring') {
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      filteredMatched = filteredMatched.filter(i => {
-        if (!i.expiryDate) return false;
-        const expiry = new Date(i.expiryDate);
-        return expiry <= thirtyDaysFromNow && i.actualStock > 0;
+
+    if (isQuickAuditMode && quickAuditOnlyChanged) {
+      matched = matched.filter(item => {
+        const val = quickAuditInputs[item.id];
+        return val !== undefined && val !== item.actualStock;
       });
     }
     
-    return filteredMatched;
-  }, [searchQuery, items, fuse, inventoryCategory, inventoryQuickFilter]);
+    return matched;
+  }, [searchQuery, items, fuse, inventoryCategory, inventoryQuickFilter, isQuickAuditMode, quickAuditOnlyChanged, quickAuditInputs]);
+
+  const quickAuditModifiedCount = useMemo(() => {
+    return items.filter(item => {
+      const val = quickAuditInputs[item.id];
+      return val !== undefined && val !== item.actualStock;
+    }).length;
+  }, [items, quickAuditInputs]);
 
   const filteredAuditItems = useMemo(() => {
     const baseItems = isEditingAudit ? items : items.filter(i => i.auditFrequency?.includes(auditType));
@@ -2463,6 +2846,15 @@ export default function App() {
     );
   }
 
+  const homeScreen = getHomeScreen();
+  const isAtRoot = (currentScreen === homeScreen && screenHistory.length <= 1) || 
+                   (currentScreen === 'overview' && currentUser?.role === 'quản lí' && screenHistory.length <= 1);
+  const showBackButton = !isAtRoot;
+  const prevScreenName: Screen | null = screenHistory.length > 1 
+    ? screenHistory[screenHistory.length - 2] 
+    : (!isAtRoot ? getParentScreen(currentScreen) : null);
+  const backScreenTitle = prevScreenName ? getScreenTitle(prevScreenName) : 'Quay lại';
+
   return (
     <div className={`min-h-screen bg-[#E5E5EA] flex flex-col items-center transition-colors duration-500 md:p-6 lg:p-10`}>
       <OfflineBanner isOnline={isOnline} />
@@ -2498,7 +2890,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm z-[110] bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl overflow-hidden border border-black/5"
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm z-[110] bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl overflow-y-auto max-h-[85vh] border border-black/5"
             >
               <div className="p-6 space-y-6">
                 <div className="text-center space-y-2">
@@ -2577,36 +2969,47 @@ export default function App() {
                     <line x1="3" y1="18" x2="21" y2="18"></line>
                   </svg>
                 </button>
-                <div className="flex flex-col gap-1">
-                {currentScreen === 'overview' ? (
+                <div className="flex flex-col gap-1 min-w-0">
+                {!showBackButton ? (
                   <>
-                    <h1 className="text-[#1C1C1E] font-bold text-3xl md:text-4xl tracking-tight">
-                      {currentUser?.name || 'Nhân viên'}
-                    </h1>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-[#1C1C1E] font-bold text-3xl md:text-4xl tracking-tight">
+                        {currentScreen === 'overview' ? (currentUser?.name || 'Tổng quan') : 'Kiểm kê kho'}
+                      </h1>
+                      {currentUser?.role && (
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-apple-blue/10 text-apple-blue shrink-0">
+                          {currentUser.role}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-apple-gray text-sm font-medium">
-                      <History className="w-3.5 h-3.5" />
+                      <History className="w-3.5 h-3.5 shrink-0" />
                       <span>{formatDate(currentTime)}</span>
                     </div>
                   </>
                 ) : (
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
                     <button 
                       onClick={goBack}
-                      className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center active:scale-90 transition-all"
+                      className="group flex items-center gap-1.5 h-10 px-3 -ml-1 rounded-full bg-black/5 hover:bg-black/10 active:scale-95 transition-all text-[#1C1C1E]"
+                      title={`Quay lại ${backScreenTitle}`}
+                      aria-label={`Quay lại ${backScreenTitle}`}
                     >
-                      <ArrowLeft className="w-5 h-5 text-[#1C1C1E]" />
+                      <ArrowLeft className="w-4 h-4 text-[#1C1C1E] group-hover:-translate-x-0.5 transition-transform shrink-0" />
+                      <span className="text-xs font-bold text-apple-gray group-hover:text-[#1C1C1E] transition-colors hidden sm:inline whitespace-nowrap">
+                        {backScreenTitle}
+                      </span>
                     </button>
-                    <h1 className="text-[#1C1C1E] font-bold text-2xl tracking-tight">
-                      {currentScreen === 'audit' && 'Kiểm kê'}
-                      {currentScreen === 'details' && 'Chi tiết'}
-                      {currentScreen === 'edit' && 'Chỉnh sửa'}
-                      {currentScreen === 'report' && 'Báo cáo'}
-                      {currentScreen === 'inventory' && 'Danh mục'}
-                      {currentScreen === 'inbound' && 'Nhập kho'}
-                      {currentScreen === 'settings' && 'Cài đặt'}
-                      {currentScreen === 'add' && 'Thêm mới'}
-                      {currentScreen === 'financial' && 'Tài chính'}
-                    </h1>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h1 className="text-[#1C1C1E] font-bold text-2xl tracking-tight truncate">
+                        {getScreenTitle(currentScreen)}
+                      </h1>
+                      {currentScreen === 'details' && selectedItem && (
+                        <span className="text-xs font-semibold text-apple-gray truncate max-w-[150px] sm:max-w-[200px] hidden md:inline">
+                          • {selectedItem.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2640,9 +3043,9 @@ export default function App() {
           </header>
         )}
 
-      <main className={`w-full ${currentScreen === 'login' ? 'p-0 flex-1 flex flex-col' : 'px-6 py-4 md:px-12 md:py-8'}`}>
+      <main className={`w-full ${currentScreen === 'login' ? 'p-0 flex-1 flex flex-col' : 'px-6 py-4 md:px-12 md:py-8 flex-1 flex flex-col'}`}>
         <ToastNotification toast={toastMessage} onClose={() => setToastMessage(null)} />
-        <PullToRefresh onRefresh={handleRefresh}>
+        <PullToRefresh onRefresh={handleRefresh} disabled={currentScreen === 'login'}>
           <AnimatePresence mode="wait">
           {currentScreen === 'login' && (
             <motion.div
@@ -2809,12 +3212,12 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Card 1: Sức khỏe tồn kho */}
                 <div className="apple-card p-5 flex flex-col justify-between relative overflow-hidden">
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
                         Sức khỏe kho
                       </span>
-                      <div className="flex items-baseline gap-2 mt-2">
+                      <div className="flex items-baseline gap-2 mt-2 flex-wrap">
                         <span className="text-3xl font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight">
                           {inventoryHealth}%
                         </span>
@@ -2823,7 +3226,7 @@ export default function App() {
                         </span>
                       </div>
                     </div>
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${inventoryHealth >= 80 ? 'bg-emerald-500/10 text-emerald-600' : inventoryHealth >= 50 ? 'bg-amber-500/10 text-amber-600' : 'bg-red-500/10 text-red-600'}`}>
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${inventoryHealth >= 80 ? 'bg-emerald-500/10 text-emerald-600' : inventoryHealth >= 50 ? 'bg-amber-500/10 text-amber-600' : 'bg-red-500/10 text-red-600'}`}>
                       <ShieldCheck className="w-6 h-6" />
                     </div>
                   </div>
@@ -2847,42 +3250,73 @@ export default function App() {
                         title={`Hết hàng: ${criticalStockItems.length}`}
                       />
                     </div>
-                    <div className="flex items-center justify-between text-[11px] font-medium text-apple-gray">
-                      <span>{healthyStockItems.length}/{items.length} SKU an toàn</span>
-                      <span>{items.length - healthyStockItems.length} cần chú ý</span>
+                    <div className="flex items-center justify-between text-[11px] font-medium text-apple-gray flex-wrap gap-1">
+                      <span className="whitespace-nowrap">{healthyStockItems.length}/{items.length} SKU an toàn</span>
+                      <span className="whitespace-nowrap">{items.length - healthyStockItems.length} cần chú ý</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Card 2: Tổng giá trị hàng hóa */}
-                <div 
-                  onClick={() => navigateTo('financial')}
-                  className="apple-card p-5 flex flex-col justify-between cursor-pointer hover:border-apple-blue/30 transition-all group"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
-                        Giá trị lưu kho
-                      </span>
-                      <div className="mt-2">
-                        <span className="text-2xl sm:text-[26px] font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight">
-                          {totalInventoryValue.toLocaleString('vi-VN')}
+                {/* Card 2: Với Quản lí -> Giá trị lưu kho; Với Nhân viên -> Tổng danh mục dược liệu */}
+                {currentUser?.role === 'quản lí' ? (
+                  <div 
+                    onClick={() => navigateTo('financial')}
+                    className="apple-card p-5 flex flex-col justify-between cursor-pointer hover:border-apple-blue/30 transition-all group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
+                          Giá trị lưu kho
                         </span>
-                        <span className="text-xs font-bold text-apple-gray ml-1">VNĐ</span>
+                        <div className="mt-2 flex items-baseline flex-wrap">
+                          <span className="text-xl sm:text-2xl lg:text-[26px] font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight break-all">
+                            {totalInventoryValue.toLocaleString('vi-VN')}
+                          </span>
+                          <span className="text-xs font-bold text-apple-gray ml-1 shrink-0">VNĐ</span>
+                        </div>
+                      </div>
+                      <div className="w-11 h-11 rounded-2xl bg-blue-500/10 text-apple-blue flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                        <TrendingUp className="w-6 h-6" />
                       </div>
                     </div>
-                    <div className="w-11 h-11 rounded-2xl bg-blue-500/10 text-apple-blue flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <TrendingUp className="w-6 h-6" />
+
+                    <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium flex-wrap gap-1">
+                      <span className="text-apple-gray">Ước tính theo giá vốn</span>
+                      <span className="text-apple-blue font-semibold flex items-center gap-0.5 group-hover:underline shrink-0">
+                        Sổ tài chính <ChevronRight className="w-3 h-3" />
+                      </span>
                     </div>
                   </div>
+                ) : (
+                  <div 
+                    onClick={() => navigateTo('inventory')}
+                    className="apple-card p-5 flex flex-col justify-between cursor-pointer hover:border-apple-blue/30 transition-all group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
+                          Tổng danh mục
+                        </span>
+                        <div className="mt-2 flex items-baseline flex-wrap">
+                          <span className="text-xl sm:text-2xl lg:text-[26px] font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight break-all">
+                            {items.length}
+                          </span>
+                          <span className="text-xs font-bold text-apple-gray ml-1 shrink-0">mặt hàng</span>
+                        </div>
+                      </div>
+                      <div className="w-11 h-11 rounded-2xl bg-blue-500/10 text-apple-blue flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                        <Boxes className="w-6 h-6" />
+                      </div>
+                    </div>
 
-                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium">
-                    <span className="text-apple-gray">Ước tính theo giá vốn</span>
-                    <span className="text-apple-blue font-semibold flex items-center gap-0.5 group-hover:underline">
-                      Sổ tài chính <ChevronRight className="w-3 h-3" />
-                    </span>
+                    <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium flex-wrap gap-1">
+                      <span className="text-apple-gray">Đang quản lý trong kho</span>
+                      <span className="text-apple-blue font-semibold flex items-center gap-0.5 group-hover:underline shrink-0">
+                        Xem kho <ChevronRight className="w-3 h-3" />
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Card 3: Cảnh báo cần nhập hàng */}
                 <div 
@@ -2895,29 +3329,29 @@ export default function App() {
                   }}
                   className={`apple-card p-5 flex flex-col justify-between cursor-pointer transition-all ${lowStockItems.length > 0 ? 'hover:border-red-400/40' : ''}`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
                         Cảnh báo tồn kho
                       </span>
-                      <div className="flex items-baseline gap-2 mt-2">
+                      <div className="flex items-baseline gap-2 mt-2 flex-wrap">
                         <span className={`text-3xl font-extrabold font-mono tabular-nums tracking-tight ${lowStockItems.length > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                           {lowStockItems.length}
                         </span>
-                        <span className="text-xs font-bold text-apple-gray">mặt hàng</span>
+                        <span className="text-xs font-bold text-apple-gray shrink-0">mặt hàng</span>
                       </div>
                     </div>
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${lowStockItems.length > 0 ? 'bg-red-500/10 text-red-600 animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${lowStockItems.length > 0 ? 'bg-red-500/10 text-red-600 animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
                       <AlertTriangle className="w-6 h-6" />
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium">
-                    <span className="text-red-600 font-semibold">
+                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium flex-wrap gap-1">
+                    <span className="text-red-600 font-semibold whitespace-nowrap">
                       {criticalStockItems.length} hết nhẵn
                     </span>
                     <span className="text-slate-300">·</span>
-                    <span className="text-amber-600 font-semibold">
+                    <span className="text-amber-600 font-semibold whitespace-nowrap">
                       {warningStockItems.length} sắp hết
                     </span>
                   </div>
@@ -2928,28 +3362,28 @@ export default function App() {
                   onClick={() => navigateTo('inventory')}
                   className="apple-card p-5 flex flex-col justify-between cursor-pointer hover:border-purple-400/30 transition-all group"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <span className="text-xs font-bold text-apple-gray uppercase tracking-wider">
                         Quy mô kho
                       </span>
-                      <div className="flex items-baseline gap-2 mt-2">
+                      <div className="flex items-baseline gap-2 mt-2 flex-wrap">
                         <span className="text-3xl font-extrabold text-[#1C1C1E] font-mono tabular-nums tracking-tight">
                           {items.length}
                         </span>
-                        <span className="text-xs font-bold text-apple-gray">mã SKU</span>
+                        <span className="text-xs font-bold text-apple-gray shrink-0">mã SKU</span>
                       </div>
                     </div>
-                    <div className="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <div className="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
                       <Boxes className="w-6 h-6" />
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium">
-                    <span className="text-apple-gray truncate max-w-[140px]">
+                  <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-[11px] font-medium flex-wrap gap-1">
+                    <span className="text-apple-gray leading-tight">
                       Tổng: {totalStockWeight} {items[0]?.unit || 'đơn vị'}
                     </span>
-                    <span className="text-purple-600 font-semibold flex items-center gap-0.5 group-hover:underline">
+                    <span className="text-purple-600 font-semibold flex items-center gap-0.5 group-hover:underline shrink-0">
                       Xem danh mục <ChevronRight className="w-3 h-3" />
                     </span>
                   </div>
@@ -3114,13 +3548,13 @@ export default function App() {
                           <div>
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-[#1C1C1E] text-sm truncate">
+                                <h4 className="font-bold text-[#1C1C1E] text-sm line-clamp-2 break-words leading-snug">
                                   {item.name}
                                 </h4>
-                                <div className="flex items-center gap-2 mt-1 text-xs text-apple-gray">
-                                  <span>{item.category}</span>
+                                <div className="flex items-center gap-1.5 mt-1 text-xs text-apple-gray flex-wrap">
+                                  <span className="shrink-0">{item.category}</span>
                                   <span aria-hidden="true">·</span>
-                                  <span className="font-medium text-slate-700">
+                                  <span className="font-medium text-slate-700 truncate max-w-[140px]">
                                     {item.location ? `Vị trí: ${item.location}` : 'Chưa xếp vị trí'}
                                   </span>
                                 </div>
@@ -3136,11 +3570,11 @@ export default function App() {
 
                             {/* Stock vs Threshold gauge */}
                             <div className="mt-3.5 space-y-1.5">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="font-semibold text-slate-700">
+                              <div className="flex items-center justify-between text-xs flex-wrap gap-1">
+                                <span className="font-semibold text-slate-700 whitespace-nowrap">
                                   Hiện có: <strong className={`font-mono tabular-nums ${isCritical ? 'text-red-600' : 'text-amber-700'}`}>{item.actualStock} {item.unit}</strong>
                                 </span>
-                                <span className="text-apple-gray font-mono text-[11px]">
+                                <span className="text-apple-gray font-mono text-[11px] whitespace-nowrap">
                                   Mức tối thiểu: {item.minThreshold || 0} {item.unit}
                                 </span>
                               </div>
@@ -3350,7 +3784,7 @@ export default function App() {
                                   {log.newStock} {log.unit}
                                 </span>
                               )}
-                              {log.importPrice && isInbound && (
+                              {currentUser?.role === 'quản lí' && log.importPrice && isInbound && (
                                 <span className="block text-[11px] text-apple-gray font-mono">
                                   {((log.amount || 0) * log.importPrice).toLocaleString('vi-VN')} đ
                                 </span>
@@ -3469,17 +3903,17 @@ export default function App() {
                           >
                             <div>
                               <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <h5 className="font-bold text-sm text-[#1C1C1E] group-hover:text-apple-blue transition-colors truncate">
-                                    {item.name}
-                                  </h5>
-                                  <div className="flex items-center gap-1.5 text-xs text-apple-gray mt-0.5">
-                                    <span className="truncate">{item.category}</span>
-                                    <span aria-hidden="true">·</span>
-                                    <span className="text-slate-600 font-medium truncate">
-                                      {item.location ? item.location : 'Chưa xếp kệ'}
-                                    </span>
-                                  </div>
+                                <div className="min-w-0 flex-1">
+                                 <h5 className="font-bold text-sm text-[#1C1C1E] group-hover:text-apple-blue transition-colors line-clamp-2 break-words leading-snug">
+                                   {item.name}
+                                 </h5>
+                                 <div className="flex items-center gap-1.5 text-xs text-apple-gray mt-1 flex-wrap">
+                                   <span className="shrink-0">{item.category}</span>
+                                   <span aria-hidden="true">·</span>
+                                   <span className="text-slate-600 font-medium truncate max-w-[120px]">
+                                     {item.location ? item.location : 'Chưa xếp kệ'}
+                                   </span>
+                                 </div>
                                 </div>
 
                                 <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md font-mono shrink-0 ${
@@ -3494,7 +3928,7 @@ export default function App() {
                               </div>
 
                               {/* Stock Metric */}
-                              <div className="mt-3 flex items-baseline justify-between">
+                              <div className="mt-3 flex items-baseline justify-between flex-wrap gap-1">
                                 <span className="text-xs text-apple-gray">Tồn thực tế:</span>
                                 <span className={`font-mono font-bold text-base tabular-nums ${
                                   isZero ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-[#1C1C1E]'
@@ -3504,10 +3938,10 @@ export default function App() {
                               </div>
 
                               {/* Threshold info */}
-                              <div className="flex items-center justify-between text-[11px] text-apple-gray font-mono mt-1">
-                                <span>Ngưỡng tối thiểu: {item.minThreshold ?? '—'}</span>
-                                {item.importPrice ? (
-                                  <span>{item.importPrice.toLocaleString('vi-VN')} đ/{item.unit}</span>
+                              <div className="flex items-center justify-between text-[11px] text-apple-gray font-mono mt-1 flex-wrap gap-1">
+                                <span className="whitespace-nowrap">Ngưỡng tối thiểu: {item.minThreshold ?? '—'}</span>
+                                {currentUser?.role === 'quản lí' && item.importPrice ? (
+                                  <span className="whitespace-nowrap">{item.importPrice.toLocaleString('vi-VN')} đ/{item.unit}</span>
                                 ) : null}
                               </div>
                             </div>
@@ -3635,7 +4069,7 @@ export default function App() {
               </div>
 
               {/* Category Filter */}
-              <div className="flex gap-2 overflow-x-auto no-scrollbar scroll-smooth pb-2">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 overscroll-x-contain touch-pan-x">
                 {['Tất cả', 'Thảo mộc thô', 'Pha chế', 'Vật tư', 'Vệ sinh'].map((cat) => (
                   <button
                     key={cat}
@@ -3701,23 +4135,23 @@ export default function App() {
                           : 'border-transparent'
                       } ${isEditingAudit ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <h3 className="text-lg font-bold text-[#1C1C1E]">{item.name}</h3>
-                            <p className="text-xs text-apple-gray font-medium">{item.category} • {item.unit}</p>
+                      <div className="flex justify-between items-start gap-3 mb-4">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-base sm:text-lg font-bold text-[#1C1C1E] line-clamp-2 break-words leading-snug">{item.name}</h3>
+                            <p className="text-xs text-apple-gray font-medium mt-0.5 truncate">{item.category} • {item.unit}</p>
                           </div>
                         </div>
                         {!isEditingAudit && (
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-apple-gray uppercase block mb-1">Lý thuyết</span>
-                            <span className="text-xl font-bold text-apple-gray/30">
+                          <div className="text-right shrink-0">
+                            <span className="text-[11px] font-bold text-apple-gray uppercase block mb-0.5 tracking-wider">Lý thuyết</span>
+                            <span className="text-xl font-bold font-mono tabular-nums text-apple-gray/40">
                               {currentUser?.role === 'quản lí' ? item.actualStock : '***'}
                             </span>
                           </div>
                         )}
                         {isEditingAudit && (
-                          <div className={`flex items-center justify-center w-10 h-10 rounded-2xl transition-all ${
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-2xl transition-all shrink-0 ${
                             item.auditFrequency?.includes(auditType) 
                               ? 'bg-apple-blue text-white shadow-md shadow-apple-blue/20' 
                               : 'bg-black/5 text-apple-gray'
@@ -3732,7 +4166,7 @@ export default function App() {
                       </div>
                       {isEditingAudit && (
                         <div className="mt-2">
-                          <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full ${
+                          <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
                             item.auditFrequency?.includes(auditType)
                               ? 'bg-apple-blue/10 text-apple-blue'
                               : 'bg-black/5 text-apple-gray'
@@ -3742,9 +4176,9 @@ export default function App() {
                         </div>
                       )}
                       {!isEditingAudit && (
-                        <div className="relative flex items-center">
+                        <div className="flex items-center justify-between bg-black/5 rounded-2xl px-5 py-3 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-apple-blue/30 focus-within:shadow-sm">
                           <input 
-                            className="w-full bg-black/5 border-none rounded-2xl py-4 pl-6 pr-16 text-3xl md:text-4xl font-bold text-apple-blue focus:ring-0 transition-all" 
+                            className="w-full bg-transparent border-none p-0 text-2xl sm:text-3xl md:text-4xl font-mono font-bold text-apple-blue focus:ring-0 focus:outline-none min-w-0" 
                             type="number" 
                             placeholder="0"
                             value={auditInputs[item.id] === 0 ? '' : (auditInputs[item.id] || '')}
@@ -3756,7 +4190,7 @@ export default function App() {
                               }));
                             }}
                           />
-                          <span className="absolute right-6 text-xs font-bold text-apple-gray uppercase">{item.unit}</span>
+                          <span className="text-sm font-bold text-apple-gray uppercase shrink-0 pl-3 select-none whitespace-nowrap">{item.unit}</span>
                         </div>
                       )}
                     </div>
@@ -3783,15 +4217,16 @@ export default function App() {
               exit={{ opacity: 0, scale: 1.05 }}
               className="space-y-8 pb-24"
             >
-              <section className="relative h-[240px] min-h-[240px] w-full rounded-[40px] overflow-hidden shadow-2xl bg-black/5 flex items-center px-8 text-apple-gray">
-                <div className="absolute inset-0 bg-gradient-to-br from-apple-blue to-[#5856D6] flex flex-col justify-end p-8 pb-12">
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider border border-white/20">{selectedItem.category}</span>
-                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider border border-white/20">{selectedItem.unit}</span>
+              <section className="relative min-h-[200px] sm:min-h-[220px] w-full rounded-[32px] sm:rounded-[40px] overflow-hidden shadow-2xl bg-black/5 flex items-end p-6 sm:p-8 text-apple-gray">
+                <div className="absolute inset-0 bg-gradient-to-br from-apple-blue to-[#5856D6]" />
+                <div className="relative z-10 w-full pr-14">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wider border border-white/20">{selectedItem.category}</span>
+                    <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wider border border-white/20">{selectedItem.unit}</span>
                   </div>
-                  <h2 className="text-white text-4xl font-extrabold tracking-tight leading-loose">{selectedItem.name}</h2>
+                  <h2 className="text-white text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight leading-snug break-words line-clamp-2">{selectedItem.name}</h2>
                 </div>
-                <div className="absolute top-0 right-0 w-48 h-48 -mr-12 -mt-12 opacity-10">
+                <div className="absolute top-0 right-0 w-48 h-48 -mr-12 -mt-12 opacity-10 pointer-events-none">
                    <svg viewBox="0 0 100 100" className="w-full h-full stroke-white fill-none">
                     <circle cx="50" cy="50" r="40" strokeWidth="0.5" />
                     <line x1="10" y1="50" x2="90" y2="50" strokeWidth="0.5" />
@@ -3799,7 +4234,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={() => navigateTo('edit', selectedItem.id)}
-                  className="absolute top-6 right-6 p-3 bg-white/20 backdrop-blur-md rounded-full border border-white/20 text-white active:scale-90 transition-all"
+                  className="absolute top-5 right-5 sm:top-6 sm:right-6 p-3 bg-white/20 backdrop-blur-md rounded-full border border-white/20 text-white active:scale-90 transition-all z-20 shrink-0"
                 >
                   <Edit3 size={20} />
                 </button>
@@ -4063,12 +4498,12 @@ export default function App() {
                   </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Số lượng nhập</label>
-                      <div className="relative">
+                      <label className="text-xs font-bold uppercase tracking-wider text-apple-gray ml-2">Số lượng nhập</label>
+                      <div className="flex items-center justify-between bg-black/5 rounded-2xl h-14 px-4 focus-within:bg-white focus-within:ring-2 focus-within:ring-apple-blue/30 focus-within:shadow-sm transition-all">
                         <input 
                           type="number"
                           placeholder="0.00"
-                          className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-2xl font-bold text-apple-blue focus:ring-0"
+                          className="w-full bg-transparent border-none p-0 text-2xl font-mono font-bold text-apple-blue focus:ring-0 focus:outline-none min-w-0"
                           value={currentInbound.amount === 0 ? '' : (currentInbound.amount || '')}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -4077,7 +4512,7 @@ export default function App() {
                           min="0.01"
                           step="0.01"
                         />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-apple-gray uppercase text-xs">
+                        <span className="font-bold text-apple-gray uppercase text-xs shrink-0 pl-2 select-none whitespace-nowrap">
                           {items.find(i => i.id === currentInbound.itemId)?.unit || ''}
                         </span>
                       </div>
@@ -4145,7 +4580,7 @@ export default function App() {
                 <div className="flex gap-4">
                   <button 
                     type="button"
-                    onClick={() => navigateTo('inventory')}
+                    onClick={goBack}
                     className="flex-1 apple-button-secondary"
                   >
                     Hủy bỏ
@@ -4306,12 +4741,12 @@ export default function App() {
                   </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Số lượng xuất</label>
-                      <div className="relative">
+                      <label className="text-xs font-bold uppercase tracking-wider text-apple-gray ml-2">Số lượng xuất</label>
+                      <div className="flex items-center justify-between bg-black/5 rounded-2xl h-14 px-4 focus-within:bg-white focus-within:ring-2 focus-within:ring-apple-blue/30 focus-within:shadow-sm transition-all">
                         <input 
                           type="number"
                           placeholder="0.00"
-                          className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-2xl font-bold text-apple-blue focus:ring-0"
+                          className="w-full bg-transparent border-none p-0 text-2xl font-mono font-bold text-apple-blue focus:ring-0 focus:outline-none min-w-0"
                           value={currentOutbound.amount === 0 ? '' : (currentOutbound.amount || '')}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -4320,7 +4755,7 @@ export default function App() {
                           min="0.01"
                           step="0.01"
                         />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-apple-gray uppercase text-xs">
+                        <span className="font-bold text-apple-gray uppercase text-xs shrink-0 pl-2 select-none whitespace-nowrap">
                           {items.find(i => i.id === currentOutbound.itemId)?.unit || ''}
                         </span>
                       </div>
@@ -4388,7 +4823,7 @@ export default function App() {
                 <div className="flex gap-4">
                   <button 
                     type="button"
-                    onClick={() => navigateTo('inventory')}
+                    onClick={goBack}
                     className="flex-1 apple-button-secondary"
                   >
                     Hủy bỏ
@@ -4564,19 +4999,21 @@ export default function App() {
                           }}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {editingItem.unit})</label>
-                        <input 
-                          className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
-                          type="number" 
-                          placeholder="0"
-                          value={editingItem.importPrice === 0 ? '' : (editingItem.importPrice || '')}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditingItem(prev => ({ ...prev, importPrice: val === '' ? 0 : Number(val) }));
-                          }}
-                        />
-                      </div>
+                      {currentUser?.role === 'quản lí' && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {editingItem.unit})</label>
+                          <input 
+                            className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
+                            type="number" 
+                            placeholder="0"
+                            value={editingItem.importPrice === 0 ? '' : (editingItem.importPrice || '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditingItem(prev => ({ ...prev, importPrice: val === '' ? 0 : Number(val) }));
+                            }}
+                          />
+                        </div>
+                      )}
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Vị trí kệ</label>
                       <input 
@@ -4591,7 +5028,7 @@ export default function App() {
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button onClick={() => navigateTo('details')} className="flex-1 apple-button-secondary">Hủy bỏ</button>
+                <button onClick={goBack} className="flex-1 apple-button-secondary">Hủy bỏ</button>
                 <button 
                   onClick={() => {
                     setConfirmConfig({
@@ -5038,7 +5475,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {currentScreen === 'report' && (
+          {currentScreen === 'report' && currentUser?.role === 'quản lí' && (
             <motion.div 
               key="report"
               initial={{ opacity: 0, y: 20 }}
@@ -5399,27 +5836,29 @@ export default function App() {
                         }}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {newItem.unit})</label>
-                      <input 
-                        className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
-                        type="number" 
-                        placeholder="0"
-                        value={newItem.importPrice === 0 ? '' : (newItem.importPrice || '')}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const numVal = val === '' ? 0 : Number(val);
-                          const normalized = (newItem.unit === 'Kg' || newItem.unit === 'Lít') ? numVal / 1000 : numVal;
-                          setNewItem(prev => ({ ...prev, importPrice: normalized }));
-                        }}
-                      />
-                    </div>
+                    {currentUser?.role === 'quản lí' && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-widest text-apple-gray ml-2">Giá nhập (VND / {newItem.unit})</label>
+                        <input 
+                          className="w-full bg-black/5 border-none rounded-2xl h-14 px-4 text-[#1C1C1E] font-bold focus:ring-0" 
+                          type="number" 
+                          placeholder="0"
+                          value={newItem.importPrice === 0 ? '' : (newItem.importPrice || '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const numVal = val === '' ? 0 : Number(val);
+                            const normalized = (newItem.unit === 'Kg' || newItem.unit === 'Lít') ? numVal / 1000 : numVal;
+                            setNewItem(prev => ({ ...prev, importPrice: normalized }));
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button onClick={() => navigateTo('inventory')} className="flex-1 apple-button-secondary">Hủy bỏ</button>
+                <button onClick={goBack} className="flex-1 apple-button-secondary">Hủy bỏ</button>
                 <button 
                   onClick={handlePreAddItem}
                   disabled={!newItem.name}
@@ -5488,57 +5927,57 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-2">
-                    <h2 className="text-6xl font-black tracking-tighter leading-none">
-                      {totalInventoryValue.toLocaleString('vi-VN')}
-                      <span className="text-2xl ml-2 text-white/50">VND</span>
+                    <h2 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight break-all flex items-baseline flex-wrap gap-2">
+                      <span>{totalInventoryValue.toLocaleString('vi-VN')}</span>
+                      <span className="text-xl sm:text-2xl text-white/60 font-bold shrink-0">VND</span>
                     </h2>
-                    <p className="text-white/60 text-sm font-medium">Dòng tiền đang nằm trong nguyên vật liệu</p>
+                    <p className="text-white/70 text-xs sm:text-sm font-medium">Dòng tiền đang nằm trong nguyên vật liệu</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 pt-4">
-                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-5 border border-white/10">
-                      <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Số lượng mặt hàng</p>
-                      <p className="text-2xl font-black">{items.length}</p>
+                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-white/10">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-white/70 mb-1">Số lượng mặt hàng</p>
+                      <p className="text-2xl sm:text-3xl font-black font-mono tabular-nums">{items.length}</p>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-5 border border-white/10">
-                      <p className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Tổng khối lượng</p>
-                      <p className="text-2xl font-black">{totalStockWeight} kg</p>
+                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-white/10">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-white/70 mb-1">Tổng khối lượng</p>
+                      <p className="text-2xl sm:text-3xl font-black font-mono tabular-nums">{totalStockWeight} kg</p>
                     </div>
                   </div>
                 </div>
               </section>
 
-              <section className="apple-card p-8">
-                <div className="flex items-center justify-between mb-8">
+              <section className="apple-card p-6 sm:p-8">
+                <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-apple-blue/10 text-apple-blue flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-2xl bg-apple-blue/10 text-apple-blue flex items-center justify-center shrink-0">
                       <DollarSign size={20} />
                     </div>
-                    <h3 className="text-[#1C1C1E] font-bold text-xl">Nhập kho trong kỳ</h3>
+                    <h3 className="text-[#1C1C1E] font-bold text-lg sm:text-xl">Nhập kho trong kỳ</h3>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xl font-black text-apple-blue">{totalInboundValueInRange.toLocaleString('vi-VN')}đ</p>
-                    <p className="text-xs font-bold text-apple-gray uppercase tracking-widest">Tổng chi phí nhập</p>
+                  <div className="text-right shrink-0">
+                    <p className="text-lg sm:text-xl font-black text-apple-blue font-mono tabular-nums whitespace-nowrap">{totalInboundValueInRange.toLocaleString('vi-VN')}đ</p>
+                    <p className="text-[11px] font-bold text-apple-gray uppercase tracking-wider">Tổng chi phí nhập</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {filteredLogsForFinancial.filter(l => l.type === 'Nhập kho').map((log, i) => (
-                    <div key={i} className="bg-black/5 rounded-2xl p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-apple-green/10 text-apple-green flex items-center justify-center">
+                    <div key={i} className="bg-black/5 rounded-2xl p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-xl bg-apple-green/10 text-apple-green flex items-center justify-center shrink-0">
                           <Plus size={18} />
                         </div>
-                        <div>
-                          <h4 className="font-bold text-[#1C1C1E] text-sm">{items.find(item => item.id === log.id)?.name || log.name || 'Không xác định'}</h4>
-                          <p className="text-xs text-apple-gray font-medium">{log.user} • {log.timestamp}</p>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-bold text-[#1C1C1E] text-sm line-clamp-1 break-words">{items.find(item => item.id === log.id)?.name || log.name || 'Không xác định'}</h4>
+                          <p className="text-xs text-apple-gray font-medium truncate">{log.user} • {log.timestamp}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-[#1C1C1E]">
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold font-mono tabular-nums text-[#1C1C1E] whitespace-nowrap">
                           {((log.amount || 0) * (log.importPrice || 0)).toLocaleString('vi-VN')}đ
                         </p>
-                        <p className="text-xs text-apple-gray font-bold uppercase tracking-widest">
+                        <p className="text-[11px] text-apple-gray font-bold uppercase tracking-wider whitespace-nowrap">
                           {log.amount} {log.unit} x {log.importPrice?.toLocaleString('vi-VN')}đ
                         </p>
                       </div>
@@ -5553,30 +5992,30 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="space-y-6">
-                <div className="flex items-center justify-between px-2">
-                  <h3 className="text-2xl font-bold text-[#1C1C1E]">Chi tiết tài chính</h3>
-                  <span className="px-4 py-1.5 bg-apple-blue/10 text-apple-blue text-xs font-bold rounded-full uppercase tracking-widest">Sắp xếp theo giá trị</span>
+              <section className="space-y-4">
+                <div className="flex items-center justify-between px-2 gap-2 flex-wrap">
+                  <h3 className="text-xl sm:text-2xl font-bold text-[#1C1C1E]">Chi tiết tài chính</h3>
+                  <span className="px-3.5 py-1 bg-apple-blue/10 text-apple-blue text-xs font-bold rounded-full uppercase tracking-wider shrink-0">Sắp xếp theo giá trị</span>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {[...items].sort((a, b) => ((b.actualStock * (b.importPrice || 0)) - (a.actualStock * (a.importPrice || 0)))).map((item, idx) => (
-                    <div key={`${item.id}-${idx}`} className="apple-card p-5 flex items-center gap-5 active:scale-[0.98] transition-all">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-[#1C1C1E] text-lg leading-tight">{item.name}</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs font-bold text-apple-gray uppercase tracking-widest">{item.actualStock} {item.unit}</span>
-                          <div className="w-1 h-1 rounded-full bg-black/10" />
-                          <span className="text-xs font-bold text-apple-blue uppercase tracking-widest">
+                    <div key={`${item.id}-${idx}`} className="apple-card p-4 sm:p-5 flex items-center justify-between gap-4 active:scale-[0.98] transition-all">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-[#1C1C1E] text-base sm:text-lg leading-snug line-clamp-2 break-words">{item.name}</h4>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-[11px] font-bold text-apple-gray uppercase tracking-wider shrink-0">{item.actualStock} {item.unit}</span>
+                          <div className="w-1 h-1 rounded-full bg-black/10 shrink-0" />
+                          <span className="text-[11px] font-bold text-apple-blue uppercase tracking-wider shrink-0">
                             {(item.importPrice || 0).toLocaleString('vi-VN')} đ / {item.unit === 'Kg' || item.unit === 'Lít' ? item.unit : 'đv'}
                           </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-lg font-black text-[#1C1C1E]">
+                      <div className="text-right shrink-0">
+                        <p className="text-base sm:text-lg font-black font-mono tabular-nums text-[#1C1C1E] whitespace-nowrap">
                           {(item.actualStock * (item.importPrice || 0)).toLocaleString('vi-VN')}đ
                         </p>
-                        <p className="text-xs font-bold text-apple-gray uppercase tracking-widest opacity-60">Giá trị tồn</p>
+                        <p className="text-[11px] font-bold text-apple-gray uppercase tracking-wider opacity-60">Giá trị tồn</p>
                       </div>
                     </div>
                   ))}
@@ -5758,27 +6197,157 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="space-y-6 pb-24"
+              className="space-y-6 pb-28"
             >
-              <section className="flex items-center justify-between px-2">
-                <div>
-                  <h2 className="text-2xl font-bold text-[#1C1C1E]">Danh mục</h2>
-                  <p className="text-apple-gray text-xs font-medium mt-1">Quản lý tất cả dược liệu</p>
+              <section className="flex items-center justify-between gap-3 px-2">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-2xl font-bold text-[#1C1C1E] truncate">Danh mục</h2>
+                  <p className="text-apple-gray text-xs font-medium mt-1 truncate">Quản lý tất cả dược liệu</p>
                 </div>
-                <div className="flex gap-2 relative z-50">
+                <div className="flex items-center gap-2 shrink-0 relative z-50">
+                  {/* Quick Audit Button */}
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const nextMode = !isQuickAuditMode;
+                      setIsQuickAuditMode(nextMode);
+                      if (nextMode) {
+                        const initial: Record<string, number> = {};
+                        items.forEach(i => {
+                          initial[i.id] = i.actualStock;
+                        });
+                        setQuickAuditInputs(initial);
+                        showToast('Đã bật chế độ Kiểm kê nhanh. Cập nhật tồn kho trực tiếp tại danh sách.', 'info');
+                      } else {
+                        setQuickAuditOnlyChanged(false);
+                      }
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0 whitespace-nowrap ${
+                      isQuickAuditMode 
+                        ? 'bg-emerald-600 text-white shadow-emerald-600/30 ring-2 ring-emerald-400' 
+                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                    title="Kiểm kê nhanh số lượng tồn kho ngay tại danh sách"
+                  >
+                    <ClipboardCheck size={16} className={isQuickAuditMode ? 'text-white' : 'text-emerald-600'} />
+                    <span>{isQuickAuditMode ? 'Đang kiểm kê' : 'Kiểm kê nhanh'}</span>
+                    {quickAuditModifiedCount > 0 && (
+                      <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-white text-emerald-700 font-extrabold font-mono tabular-nums">
+                        {quickAuditModifiedCount}
+                      </span>
+                    )}
+                  </button>
+
                   <button 
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       navigateTo('add');
                     }}
-                    className="bg-apple-blue text-white p-2.5 rounded-full shadow-lg shadow-apple-blue/20 active:scale-90 transition-all hover:bg-apple-blue/90 flex items-center justify-center cursor-pointer"
+                    className="bg-apple-blue text-white p-2.5 rounded-full shadow-lg shadow-apple-blue/20 active:scale-90 transition-all hover:bg-apple-blue/90 flex items-center justify-center cursor-pointer shrink-0"
                     title="Thêm mới"
                   >
                     <Plus size={20} />
                   </button>
                 </div>
               </section>
+
+              {/* Quick Audit Active Banner */}
+              {isQuickAuditMode && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-4 shadow-sm space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                        <ClipboardCheck size={20} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-emerald-950 truncate">Chế độ Kiểm kê nhanh</h4>
+                        <p className="text-xs text-emerald-700 leading-snug break-words">Cập nhật số lượng tồn kho thực tế ngay tại danh sách, không cần chuyển trang.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuickAuditMode(false);
+                        setQuickAuditOnlyChanged(false);
+                      }}
+                      className="p-1.5 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer shrink-0"
+                      title="Thoát chế độ kiểm kê nhanh"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-emerald-200/60">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-medium text-emerald-900">
+                        Đã thay đổi: <strong className="text-emerald-700 font-bold font-mono tabular-nums">{quickAuditModifiedCount}</strong> mặt hàng
+                      </span>
+                      {quickAuditModifiedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuickAuditOnlyChanged(!quickAuditOnlyChanged)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border cursor-pointer shrink-0 whitespace-nowrap ${
+                            quickAuditOnlyChanged
+                              ? 'bg-emerald-700 text-white border-emerald-700'
+                              : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-100/50'
+                          }`}
+                        >
+                          {quickAuditOnlyChanged ? 'Hiện tất cả' : 'Chỉ hiện mục đã đổi'}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {quickAuditModifiedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const resetInputs: Record<string, number> = {};
+                            items.forEach(i => {
+                              resetInputs[i.id] = i.actualStock;
+                            });
+                            setQuickAuditInputs(resetInputs);
+                            showToast('Đã đặt lại tất cả các thay đổi chưa lưu.', 'info');
+                          }}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-white border border-emerald-300 hover:bg-emerald-100/60 active:scale-95 transition-all flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
+                        >
+                          <RotateCcw size={13} />
+                          <span>Đặt lại</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={quickAuditModifiedCount === 0 || isQuickAuditBatchSaving}
+                        onClick={handleQuickAuditSaveAll}
+                        className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0 whitespace-nowrap ${
+                          quickAuditModifiedCount > 0 && !isQuickAuditBatchSaving
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
+                            : 'bg-emerald-200/70 text-emerald-600 cursor-not-allowed'
+                        }`}
+                      >
+                        {isQuickAuditBatchSaving ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Đang lưu...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check size={14} />
+                            <span>Lưu tất cả ({quickAuditModifiedCount})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Search and Filter in Inventory */}
               <div className="space-y-4">
@@ -5822,7 +6391,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1">
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1 overscroll-x-contain touch-pan-x">
                   {[
                     { id: 'all', label: 'Tất cả' },
                     { id: 'low_stock', label: 'Sắp hết hàng', icon: AlertTriangle },
@@ -5844,7 +6413,7 @@ export default function App() {
                   ))}
                 </div>
 
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1">
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1 overscroll-x-contain touch-pan-x">
                   {['Tất cả', ...customCategories].map((cat) => (
                     <button
                       key={cat}
@@ -5863,87 +6432,302 @@ export default function App() {
 
               <div className="grid grid-cols-1 gap-3">
                 {filteredItems.length > 0 ? (
-                  filteredItems.map((item, idx) => (
-                    <SwipeableLogItem
-                      key={`${item.id}-${idx}`}
-                      onEdit={() => navigateTo('edit', item.id)}
-                      onDelete={() => {
-                        setSelectedItemId(item.id);
-                        setConfirmConfig({
-                          title: 'Xóa dược liệu',
-                          message: `Bạn có chắc chắn muốn xóa "${item.name}" khỏi hệ thống không?`,
-                          type: 'danger',
-                          icon: <Trash2 className="w-10 h-10" />,
-                          onConfirm: () => handleDeleteItem(item.id)
-                        });
-                        setShowConfirmModal(true);
-                      }}
-                    >
-                      <div 
-                        onClick={() => navigateTo('details', item.id)}
-                        className="apple-card p-5 flex items-center justify-between border-transparent hover:border-apple-blue/20 transition-all duration-300 cursor-pointer active:scale-[0.99]"
+                  filteredItems.map((item, idx) => {
+                    const isCardQuickAuditActive = isQuickAuditMode || quickAuditSingleItemId === item.id;
+                    const pendingStock = quickAuditInputs[item.id] !== undefined ? quickAuditInputs[item.id] : item.actualStock;
+                    const stockDiff = pendingStock - item.actualStock;
+                    const isItemSaving = quickAuditSavingId === item.id;
+                    const isRecentlySaved = !!recentlySavedItemIds[item.id];
+
+                    return (
+                      <SwipeableLogItem
+                        key={`${item.id}-${idx}`}
+                        disabled={isCardQuickAuditActive}
+                        onEdit={() => navigateTo('edit', item.id)}
+                        onDelete={() => {
+                          setSelectedItemId(item.id);
+                          setConfirmConfig({
+                            title: 'Xóa dược liệu',
+                            message: `Bạn có chắc chắn muốn xóa "${item.name}" khỏi hệ thống không?`,
+                            type: 'danger',
+                            icon: <Trash2 className="w-10 h-10" />,
+                            onConfirm: () => handleDeleteItem(item.id)
+                          });
+                          setShowConfirmModal(true);
+                        }}
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs font-bold uppercase tracking-widest text-apple-blue px-2 py-0.5 bg-apple-blue/5 rounded-md">{item.category}</span>
-                            <span className="text-xs font-bold uppercase tracking-widest text-[#1C1C1E] px-2 py-0.5 bg-black/5 rounded-md">{item.unit}</span>
-                            {item.actualStock < (item.minThreshold || 0) && (
-                              <span className="text-xs font-bold uppercase tracking-widest text-red-500 px-2 py-0.5 bg-red-50 rounded-md">Tồn thấp</span>
-                            )}
+                        <div 
+                          onClick={() => {
+                            if (isCardQuickAuditActive) return;
+                            navigateTo('details', item.id);
+                          }}
+                          className={`apple-card p-5 flex flex-col gap-3 border-transparent hover:border-apple-blue/20 transition-all duration-300 ${
+                            isCardQuickAuditActive 
+                              ? 'border-emerald-300 ring-1 ring-emerald-400/40 shadow-sm' 
+                              : 'cursor-pointer active:scale-[0.99]'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-apple-blue px-2 py-0.5 bg-apple-blue/5 rounded-md shrink-0">{item.category}</span>
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-[#1C1C1E] px-2 py-0.5 bg-black/5 rounded-md shrink-0">{item.unit}</span>
+                                {item.actualStock < (item.minThreshold || 0) && (
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-red-500 px-2 py-0.5 bg-red-50 rounded-md shrink-0">Tồn thấp</span>
+                                )}
+                                {isRecentlySaved && (
+                                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 px-2 py-0.5 bg-emerald-100 rounded-md animate-pulse shrink-0">
+                                    ✓ Đã lưu tồn kho
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="text-base sm:text-lg font-extrabold text-[#1C1C1E] mb-2 line-clamp-2 break-words leading-snug group-hover:text-apple-blue transition-colors">{item.name}</h3>
+                              <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+                                <div className="flex flex-col min-w-[70px]">
+                                  <span className="text-[11px] font-bold text-apple-gray uppercase tracking-wider mb-0.5 whitespace-nowrap">Tồn hệ thống</span>
+                                  <span className={`text-sm font-black font-mono tabular-nums leading-tight ${item.actualStock < (item.minThreshold || 0) ? 'text-red-500' : 'text-[#1C1C1E]'}`}>
+                                    {item.actualStock} {item.unit}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col min-w-[60px]">
+                                  <span className="text-[11px] font-bold text-apple-gray uppercase tracking-wider mb-0.5 whitespace-nowrap">Vị trí</span>
+                                  <span className="text-sm font-bold text-apple-gray leading-tight truncate max-w-[120px]">{item.location || '—'}</span>
+                                </div>
+                                {currentUser?.role === 'quản lí' && (
+                                  <div className="flex flex-col min-w-[70px]">
+                                    <span className="text-[11px] font-bold text-apple-gray uppercase tracking-wider mb-0.5 whitespace-nowrap">Giá nhập</span>
+                                    <span className="text-sm font-bold font-mono tabular-nums text-apple-gray leading-tight whitespace-nowrap">{(item.importPrice || 0).toLocaleString()}đ</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 pl-2 border-l border-black/5 shrink-0 self-start">
+                              {/* Quick Audit Toggle on Item Card */}
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (quickAuditSingleItemId === item.id) {
+                                    setQuickAuditSingleItemId(null);
+                                  } else {
+                                    setQuickAuditSingleItemId(item.id);
+                                    setQuickAuditInputs(prev => ({
+                                      ...prev,
+                                      [item.id]: prev[item.id] !== undefined ? prev[item.id] : item.actualStock
+                                    }));
+                                  }
+                                }}
+                                className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                                  quickAuditSingleItemId === item.id 
+                                    ? 'bg-emerald-600 text-white shadow-md' 
+                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white'
+                                }`}
+                                title="Kiểm kê nhanh dược liệu này"
+                              >
+                                <ClipboardCheck size={18} />
+                              </button>
+
+                              <div className="hidden md:flex flex-col gap-2 shrink-0">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigateTo('edit', item.id);
+                                  }}
+                                  className="p-2.5 bg-apple-blue/10 text-apple-blue rounded-xl active:scale-90 transition-all hover:bg-apple-blue hover:text-white shrink-0"
+                                  title="Chỉnh sửa chi tiết"
+                                >
+                                  <Edit3 size={18} />
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedItemId(item.id);
+                                    setConfirmConfig({
+                                      title: 'Xóa dược liệu',
+                                      message: `Bạn có chắc chắn muốn xóa "${item.name}" khỏi hệ thống không?`,
+                                      type: 'danger',
+                                      icon: <Trash2 className="w-10 h-10" />,
+                                      onConfirm: () => handleDeleteItem(item.id)
+                                    });
+                                    setShowConfirmModal(true);
+                                  }}
+                                  className="p-2.5 bg-red-500/10 text-red-500 rounded-xl active:scale-90 transition-all hover:bg-red-500 hover:text-white shrink-0"
+                                  title="Xóa dược liệu"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                              {!isCardQuickAuditActive && (
+                                <ChevronRight className="w-5 h-5 text-apple-gray/20 shrink-0" />
+                              )}
+                            </div>
                           </div>
-                          <h3 className="text-lg font-extrabold text-[#1C1C1E] mb-2 truncate group-hover:text-apple-blue transition-colors">{item.name}</h3>
-                          <div className="flex items-center gap-6">
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-0.5">Tồn kho</span>
-                              <span className={`text-sm font-black ${item.actualStock < (item.minThreshold || 0) ? 'text-red-500' : 'text-[#1C1C1E]'}`}>
-                                {item.actualStock} {item.unit}
-                              </span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-0.5">Vị trí</span>
-                              <span className="text-sm font-bold text-apple-gray">{item.location || '—'}</span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold text-apple-gray uppercase tracking-widest mb-0.5">Giá nhập</span>
-                              <span className="text-sm font-bold text-apple-gray">{(item.importPrice || 0).toLocaleString()}đ</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 pl-4 border-l border-black/5">
-                          <div className="hidden md:flex flex-col gap-2">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigateTo('edit', item.id);
-                              }}
-                              className="p-2.5 bg-apple-blue/10 text-apple-blue rounded-xl active:scale-90 transition-all hover:bg-apple-blue hover:text-white"
+
+                          {/* Quick Audit Inline Adjustment Bar */}
+                          {isCardQuickAuditActive && (
+                            <div 
+                              onClick={(e) => e.stopPropagation()} 
+                              className="mt-2 pt-3 border-t border-emerald-100 flex flex-col gap-2.5 bg-emerald-50/70 -mx-5 -mb-5 p-4 rounded-b-2xl"
                             >
-                              <Edit3 size={18} />
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedItemId(item.id);
-                                setConfirmConfig({
-                                  title: 'Xóa dược liệu',
-                                  message: `Bạn có chắc chắn muốn xóa "${item.name}" khỏi hệ thống không?`,
-                                  type: 'danger',
-                                  icon: <Trash2 className="w-10 h-10" />,
-                                  onConfirm: () => handleDeleteItem(item.id)
-                                });
-                                setShowConfirmModal(true);
-                              }}
-                              className="p-2.5 bg-red-500/10 text-red-500 rounded-xl active:scale-90 transition-all hover:bg-red-500 hover:text-white"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-apple-gray/20" />
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[11px] font-bold text-apple-gray uppercase tracking-wider whitespace-nowrap">Tồn thực tế:</span>
+                                  {stockDiff === 0 ? (
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-black/5 text-[#1C1C1E] font-mono tabular-nums whitespace-nowrap">
+                                      Khớp ({item.actualStock} {item.unit})
+                                    </span>
+                                  ) : stockDiff > 0 ? (
+                                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono tabular-nums whitespace-nowrap">
+                                      Thừa +{stockDiff} {item.unit}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 font-mono tabular-nums whitespace-nowrap">
+                                      Thiếu {stockDiff} {item.unit}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {stockDiff !== 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setQuickAuditInputs(prev => ({
+                                          ...prev,
+                                          [item.id]: item.actualStock
+                                        }));
+                                      }}
+                                      className="text-[11px] text-apple-gray hover:text-[#1C1C1E] underline px-1 py-0.5 cursor-pointer whitespace-nowrap"
+                                      title="Khôi phục số lượng ban đầu"
+                                    >
+                                      Đặt lại
+                                    </button>
+                                  )}
+                                  {quickAuditSingleItemId === item.id && !isQuickAuditMode && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setQuickAuditSingleItemId(null)}
+                                      className="text-[11px] text-apple-gray hover:text-red-500 px-1 py-0.5 cursor-pointer whitespace-nowrap"
+                                    >
+                                      Đóng
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Stepper, Direct Number Input and Save */}
+                              <div className="flex items-center gap-1 sm:gap-1.5 w-full">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuickAuditInputs(prev => ({
+                                      ...prev,
+                                      [item.id]: Math.max(0, (prev[item.id] !== undefined ? prev[item.id] : item.actualStock) - 10)
+                                    }));
+                                  }}
+                                  className="px-2 py-2 rounded-xl bg-white border border-black/10 hover:bg-black/5 active:scale-95 text-xs font-bold text-[#1C1C1E] cursor-pointer shrink-0 select-none whitespace-nowrap"
+                                  title="Trừ 10"
+                                >
+                                  -10
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuickAuditInputs(prev => ({
+                                      ...prev,
+                                      [item.id]: Math.max(0, (prev[item.id] !== undefined ? prev[item.id] : item.actualStock) - 1)
+                                    }));
+                                  }}
+                                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white border border-black/10 hover:bg-black/5 active:scale-95 flex items-center justify-center text-sm font-bold text-[#1C1C1E] cursor-pointer shrink-0 select-none"
+                                  title="Trừ 1"
+                                >
+                                  <Minus size={14} />
+                                </button>
+
+                                <div className="flex-1 min-w-[76px] flex items-center justify-center bg-white rounded-xl border border-emerald-300 shadow-inner px-2 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={pendingStock === 0 ? '' : pendingStock}
+                                    placeholder="0"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setQuickAuditInputs(prev => ({
+                                        ...prev,
+                                        [item.id]: val === '' ? 0 : Math.max(0, Number(val))
+                                      }));
+                                    }}
+                                    className="w-full text-center bg-transparent border-none p-0 font-mono font-black text-base sm:text-lg text-emerald-950 focus:ring-0 focus:outline-none min-w-0"
+                                  />
+                                  <span className="text-[11px] sm:text-xs font-bold text-apple-gray shrink-0 pl-1 select-none whitespace-nowrap">
+                                    {item.unit}
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuickAuditInputs(prev => ({
+                                      ...prev,
+                                      [item.id]: (prev[item.id] !== undefined ? prev[item.id] : item.actualStock) + 1
+                                    }));
+                                  }}
+                                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white border border-black/10 hover:bg-black/5 active:scale-95 flex items-center justify-center text-sm font-bold text-[#1C1C1E] cursor-pointer shrink-0 select-none"
+                                  title="Cộng 1"
+                                >
+                                  <Plus size={14} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuickAuditInputs(prev => ({
+                                      ...prev,
+                                      [item.id]: (prev[item.id] !== undefined ? prev[item.id] : item.actualStock) + 10
+                                    }));
+                                  }}
+                                  className="px-2 py-2 rounded-xl bg-white border border-black/10 hover:bg-black/5 active:scale-95 text-xs font-bold text-[#1C1C1E] cursor-pointer shrink-0 select-none whitespace-nowrap"
+                                  title="Cộng 10"
+                                >
+                                  +10
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isItemSaving}
+                                  onClick={() => handleQuickAuditSaveSingle(item)}
+                                  className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer shrink-0 select-none whitespace-nowrap ${
+                                    isRecentlySaved
+                                      ? 'bg-emerald-500 text-white'
+                                      : stockDiff !== 0
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                                        : 'bg-[#1C1C1E] hover:bg-black text-white'
+                                  }`}
+                                  title="Lưu số lượng kiểm kê cho mục này"
+                                >
+                                  {isItemSaving ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  ) : isRecentlySaved ? (
+                                    <>
+                                      <Check size={14} />
+                                      <span>Đã lưu</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check size={14} />
+                                      <span>Lưu</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    </SwipeableLogItem>
-                  ))
+                      </SwipeableLogItem>
+                    );
+                  })
                 ) : (
                   <div className="p-12 text-center apple-card flex flex-col items-center justify-center border-dashed border-2 border-black/5">
                     <div className="w-16 h-16 bg-black/5 rounded-full flex items-center justify-center mb-4">
@@ -5954,6 +6738,55 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {/* Floating Bottom Bar for Bulk Save in Quick Audit Mode */}
+              {isQuickAuditMode && quickAuditModifiedCount > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 30 }}
+                  className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] w-[92%] max-w-lg bg-[#1C1C1E]/95 backdrop-blur-md text-white p-3.5 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-xs">
+                      {quickAuditModifiedCount}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold">Có {quickAuditModifiedCount} mặt hàng thay đổi</p>
+                      <p className="text-[10px] text-white/60">Chưa lưu vào cơ sở dữ liệu</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const resetInputs: Record<string, number> = {};
+                        items.forEach(i => {
+                          resetInputs[i.id] = i.actualStock;
+                        });
+                        setQuickAuditInputs(resetInputs);
+                      }}
+                      className="px-3 py-2 text-xs font-bold text-white/80 hover:text-white active:scale-95 transition-all cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isQuickAuditBatchSaving}
+                      onClick={handleQuickAuditSaveAll}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {isQuickAuditBatchSaving ? (
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Check size={15} />
+                      )}
+                      <span>Lưu ngay</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -5965,12 +6798,12 @@ export default function App() {
       {/* Confirmation Modal */}
       <AnimatePresence>
         {showConfirmModal && (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-6 overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-sm apple-card p-8 flex flex-col items-center text-center"
+              className="relative w-full max-w-sm apple-card p-8 flex flex-col items-center text-center max-h-[90vh] overflow-y-auto"
             >
               <div className={`mb-6 w-20 h-20 rounded-full flex items-center justify-center ${confirmConfig?.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-apple-blue/10 text-apple-blue'}`}>
                 {confirmConfig?.icon || <Save className="w-10 h-10" />}
@@ -6015,13 +6848,13 @@ export default function App() {
 
       {/* Supplier Modal */}
       <AnimatePresence>
-        {showSupplierModal && (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+        {showSupplierModal && currentUser?.role === 'quản lí' && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-6 overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-5xl apple-card p-8 space-y-6"
+              className="relative w-full max-w-5xl apple-card p-8 space-y-6 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-apple-blue/10 text-apple-blue flex items-center justify-center">
@@ -6097,12 +6930,12 @@ export default function App() {
       {/* Delete All Data Password Modal */}
       <AnimatePresence>
         {showDeletePasswordModal && (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[110] flex items-center justify-center p-6 overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-sm apple-card p-8 flex flex-col items-center text-center"
+              className="relative w-full max-w-sm apple-card p-8 flex flex-col items-center text-center max-h-[90vh] overflow-y-auto"
             >
               <div className="mb-6 w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center text-red-500">
                 <ShieldCheck className="w-8 h-8" />
